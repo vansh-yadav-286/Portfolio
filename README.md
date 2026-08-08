@@ -114,8 +114,6 @@
 
 ## `⟨ certifications verified ⟩`
 
-> 🏅 Industry-recognised credentials — click to verify
-
 | &nbsp; | Certification | Issuer | Year | Domain |
 |:---:|:---|:---:|:---:|:---:|
 | ![MS](https://img.shields.io/badge/-AZ-0078D4?style=flat-square&logo=microsoftazure&logoColor=white) | **AZ-900** — Azure Fundamentals | Microsoft | 2025 | Cloud |
@@ -127,6 +125,7 @@
 | ![OCI](https://img.shields.io/badge/-OCI-F80000?style=flat-square&logo=oracle&logoColor=white) | Oracle Cloud Infrastructure | Oracle | 2025 | Cloud |
 | ![HR](https://img.shields.io/badge/-HR-00EA64?style=flat-square&logo=hackerrank&logoColor=black) | Python Basic | HackerRank | 2025 | Python |
 
+> 🏅 view all on Linkedin
 ---
 
 <!-- ═══════════════════════ GITHUB STATS ═══════════════════════ -->
