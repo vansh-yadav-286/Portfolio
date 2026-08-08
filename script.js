@@ -63,13 +63,13 @@ const certificates = [
     title: 'Azure Fundamentals',
     tag: 'Microsoft',
     logo: 'Logo/Microsoft Logo.jpg',
-    pdf: 'Certification/Azure Fundamental(AZ-900).pdf'
+    pdf: 'Certification/Azure Fundamental(Az-900).pdf'
   },
   {
     title: 'Azure AI Fundamentals',
     tag: 'Microsoft',
     logo: 'Logo/Microsoft Logo.jpg',
-    pdf: 'Certification/AI-900-Zero-to-Certified.pdf'
+    pdf: 'Certification/Ai-900-Certificate.pdf'
   },
   {
     title: 'AI Fundamentals',
@@ -81,7 +81,7 @@ const certificates = [
     title: 'Oracle Cloud Infrastructure AI Foundations Associate',
     tag: 'OCI',
     logo: 'Logo/Oracle Logo.jpg',
-    pdf: 'Certification/Oracle Cloud Infrastructure AI Foundations Associate.pdf'
+    pdf: 'Certification/oracle.pdf'
   },
   {
     title: 'Gen AI Engineering Mastermind',
@@ -93,7 +93,7 @@ const certificates = [
     title: 'Web Development Fundamental',
     tag: 'IBM',
     logo: 'Logo/Ibm Logo.jpg',
-    pdf: 'Certification/Web Development Fundamental.pdf'
+    pdf: 'Certification/Web Devlopment Fundamental.pdf'
   },
   {
     title: 'Enterprise Design Thinking Practitioner',
@@ -105,7 +105,7 @@ const certificates = [
     title: 'Prompt Engineering',
     tag: 'IBM',
     logo: 'Logo/Ibm Logo.jpg',
-    pdf: 'Certification/Prompt Engineering.pdf'
+    pdf: 'Certification/IBM Prompt Engineering Certificate.pdf'
   },
   {
     title: 'Python (Basic) — HackerRank',
