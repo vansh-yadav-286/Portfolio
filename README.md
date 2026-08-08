@@ -118,11 +118,14 @@
 
 | &nbsp; | Certification | Issuer | Year | Domain |
 |:---:|:---|:---:|:---:|:---:|
-| ![MS](https://img.shields.io/badge/-AI-0078D4?style=flat-square&logo=microsoftazure&logoColor=white) | **AI-900** — Azure AI Fundamentals | Microsoft | 2026 | AI |
-| ![IBM](https://img.shields.io/badge/-IBM-1261FE?style=flat-square&logo=ibm&logoColor=white) | Enterprise Design Thinking Practitioner | IBM | 2026 | Design |
 | ![MS](https://img.shields.io/badge/-AZ-0078D4?style=flat-square&logo=microsoftazure&logoColor=white) | **AZ-900** — Azure Fundamentals | Microsoft | 2025 | Cloud |
+| ![MS](https://img.shields.io/badge/-AI-0078D4?style=flat-square&logo=microsoftazure&logoColor=white) | **AI-900** — Azure AI Fundamentals | Microsoft | 2026 | AI |
+| ![IBM](https://img.shields.io/badge/-IBM-1261FE?style=flat-square&logo=ibm&logoColor=white) | Artificial Intelligence Fundamentals | IBM | 2026 | AI |
+| ![IBM](https://img.shields.io/badge/-IBM-1261FE?style=flat-square&logo=ibm&logoColor=white) | Web Development Fundamentals | IBM | 2026 | Web Development |
+| ![IBM](https://img.shields.io/badge/-IBM-1261FE?style=flat-square&logo=ibm&logoColor=white) | Enterprise Design Thinking Practitioner | IBM | 2026 | Design Thinking |
+| ![IBM](https://img.shields.io/badge/-IBM-1261FE?style=flat-square&logo=ibm&logoColor=white) | Prompt Engineering | IBM | 2026 | Prompt Engineering |
 | ![OCI](https://img.shields.io/badge/-OCI-F80000?style=flat-square&logo=oracle&logoColor=white) | Oracle Cloud Infrastructure | Oracle | 2025 | Cloud |
-| ![IBM](https://img.shields.io/badge/-IBM-1261FE?style=flat-square&logo=ibm&logoColor=white) | Introduction to Artificial Intelligence | IBM | 2025 | AI |
+
 | ![HR](https://img.shields.io/badge/-HR-00EA64?style=flat-square&logo=hackerrank&logoColor=black) | Python Basic | HackerRank | 2025 | Python |
 
 ---
