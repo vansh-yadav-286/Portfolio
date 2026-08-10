@@ -1,23 +1,13 @@
 'use strict';
 
-/* =========================================================================
-   VANSH_YADAV — script.js
-   Vanilla JS, zero dependencies. Small modules, each with an init*()
-   function, all wired up at the bottom on DOMContentLoaded.
-
-   ⚠ To update contact details site-wide, edit CONFIG below — these are
-   also duplicated in index.html's <head> (meta tags + JSON-LD) and in the
-   Contact section markup, since those need to be static for SEO/crawlers.
-   ========================================================================= */
-
-/* ---------- 0. Config ---------- */
+// TODO: pull this into a config.json at some point so it's not hardcoded
 const CONFIG = {
   name: 'Vansh Yadav',
   email: 'vanshyadavy286@gmail.com',
   linkedin: 'https://www.linkedin.com/in/vanshyadav286/',
   github: 'https://github.com/vansh-yadav-286',
   githubUsername: 'vansh-yadav-286',
-  githubCacheTTL: 60 * 60 * 1000, // 1 hour — see initGithubStats()
+  githubCacheTTL: 60 * 60 * 1000, // 1hr cache, see initGithubStats
   roles: [
     'GenAI Engineer',
     'AI Engineer',
@@ -27,11 +17,8 @@ const CONFIG = {
   ]
 };
 
-/* ---------- 1. Safe storage ----------
-   Wraps localStorage so the site degrades quietly (falls back to an
-   in-memory object) if storage is blocked — sandboxed previews, private
-   browsing, etc. Once deployed to a real host this behaves like normal
-   localStorage. */
+// wrapper around localStorage so things don't blow up in private
+// browsing / safari weirdness. falls back to an in-memory object
 const safeStorage = (() => {
   const memoryFallback = {};
   let available = false;
@@ -40,85 +27,47 @@ const safeStorage = (() => {
     window.localStorage.setItem(testKey, '1');
     window.localStorage.removeItem(testKey);
     available = true;
-  } catch (e) { available = false; }
+  } catch (e) {
+    available = false;
+  }
 
   return {
     get(key) {
-      try { return available ? window.localStorage.getItem(key) : (memoryFallback[key] ?? null); }
-      catch (e) { return memoryFallback[key] ?? null; }
+      try {
+        return available ? window.localStorage.getItem(key) : (memoryFallback[key] ?? null);
+      } catch (e) {
+        return memoryFallback[key] ?? null;
+      }
     },
     set(key, value) {
-      try { if (available) window.localStorage.setItem(key, value); else memoryFallback[key] = value; }
-      catch (e) { memoryFallback[key] = value; }
+      try {
+        if (available) window.localStorage.setItem(key, value);
+        else memoryFallback[key] = value;
+      } catch (e) {
+        memoryFallback[key] = value;
+      }
     }
   };
 })();
 
-/* ---------- 0b. Certificates data ----------
-   Add a new certificate by adding one object here — cards are generated
-   entirely from this array by initCertificates() below. Paths are relative
-   (never hardcode absolute URLs) and resolve against assets/certificates/. */
+// certs data - add new ones here, cards render automatically
 const certificates = [
-  {
-    title: 'Azure Fundamentals',
-    tag: 'Microsoft',
-    logo: 'Logo/Microsoft Logo.jpg',
-    pdf: 'Certification/Azure Fundamental(Az-900).pdf'
-  },
-  {
-    title: 'Azure AI Fundamentals',
-    tag: 'Microsoft',
-    logo: 'Logo/Microsoft Logo.jpg',
-    pdf: 'Certification/Ai-900-Certificate.pdf'
-  },
-  {
-    title: 'AI Fundamentals',
-    tag: 'IBM',
-    logo: 'Logo/Ibm Logo.jpg',
-    pdf: 'Certification/Artificial Intelligence Fundamentals(IBM).pdf'
-  },
-  {
-    title: 'Oracle Cloud Infrastructure AI Foundations Associate',
-    tag: 'OCI',
-    logo: 'Logo/Oracle Logo.jpg',
-    pdf: 'Certification/oracle.pdf'
-  },
-  {
-    title: 'Gen AI Engineering Mastermind',
-    tag: 'Outskill',
-    logo: 'Logo/Outskill Logo.jpg',
-    pdf: 'Certification/Outskill_Certificate.pdf'
-  },
-  {
-    title: 'Web Development Fundamental',
-    tag: 'IBM',
-    logo: 'Logo/Ibm Logo.jpg',
-    pdf: 'Certification/Web Devlopment Fundamental.pdf'
-  },
-  {
-    title: 'Enterprise Design Thinking Practitioner',
-    tag: 'IBM',
-    logo: 'Logo/Ibm Logo.jpg',
-    pdf: 'Certification/EnterpriseDesignThinkingPractitioner.pdf'
-  },
-  {
-    title: 'Prompt Engineering',
-    tag: 'IBM',
-    logo: 'Logo/Ibm Logo.jpg',
-    pdf: 'Certification/IBM Prompt Engineering Certificate.pdf'
-  },
-  {
-    title: 'Python (Basic) — HackerRank',
-    tag: 'HackerRank',
-    logo: 'Logo/HackerRank Logo.jpg',
-    pdf: 'Certification/python_basic certificate.pdf'
-  },
+  { title: 'Azure Fundamentals', tag: 'Microsoft', logo: 'Logo/Microsoft Logo.jpg', pdf: 'Certification/Azure Fundamental(Az-900).pdf' },
+  { title: 'Azure AI Fundamentals', tag: 'Microsoft', logo: 'Logo/Microsoft Logo.jpg', pdf: 'Certification/Ai-900-Certificate.pdf' },
+  { title: 'AI Fundamentals', tag: 'IBM', logo: 'Logo/Ibm Logo.jpg', pdf: 'Certification/Artificial Intelligence Fundamentals(IBM).pdf' },
+  { title: 'Oracle Cloud Infrastructure AI Foundations Associate', tag: 'OCI', logo: 'Logo/Oracle Logo.jpg', pdf: 'Certification/oracle.pdf' },
+  { title: 'Gen AI Engineering Mastermind', tag: 'Outskill', logo: 'Logo/Outskill Logo.jpg', pdf: 'Certification/Outskill_Certificate.pdf' },
+  { title: 'Web Development Fundamental', tag: 'IBM', logo: 'Logo/Ibm Logo.jpg', pdf: 'Certification/Web Devlopment Fundamental.pdf' },
+  { title: 'Enterprise Design Thinking Practitioner', tag: 'IBM', logo: 'Logo/Ibm Logo.jpg', pdf: 'Certification/EnterpriseDesignThinkingPractitioner.pdf' },
+  { title: 'Prompt Engineering', tag: 'IBM', logo: 'Logo/Ibm Logo.jpg', pdf: 'Certification/IBM Prompt Engineering Certificate.pdf' },
+  { title: 'Python (Basic) — HackerRank', tag: 'HackerRank', logo: 'Logo/HackerRank Logo.jpg', pdf: 'Certification/python_basic certificate.pdf' },
 ];
 
 const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const isCoarsePointer = window.matchMedia('(pointer: coarse)').matches;
 
-/* ---------- 2. Utilities ---------- */
+// ---- small helpers used all over the file ----
+
 function $(sel, ctx = document) { return ctx.querySelector(sel); }
 function $$(sel, ctx = document) { return Array.from(ctx.querySelectorAll(sel)); }
 function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
@@ -151,14 +100,17 @@ function scrollToSection(id) {
   window.scrollTo({ top, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
 }
 
-/* ---------- 3. Boot sequence ----------
-   The signature motif: content "generates" onto the screen token by
-   token, like a model streaming a response, rather than just fading in. */
+// ---- boot sequence (the fake terminal intro) ----
+
 function typeLine(container, text, speed) {
   return new Promise((resolve) => {
     const p = document.createElement('p');
     container.appendChild(p);
-    if (prefersReducedMotion || speed === 0) { p.textContent = text; resolve(); return; }
+    if (prefersReducedMotion || speed === 0) {
+      p.textContent = text;
+      resolve();
+      return;
+    }
     let i = 0;
     const timer = setInterval(() => {
       p.textContent = text.slice(0, i + 1);
@@ -168,9 +120,6 @@ function typeLine(container, text, speed) {
   });
 }
 
-/* Hides everything except #boot-screen from the accessibility tree (and
-   keyboard tab order) while it's covering the page, so AT/keyboard users
-   can't land on content that's visually blocked. Restored once boot ends. */
 function setPageInert(isInert) {
   $$('body > *').forEach((el) => {
     if (el.id === 'boot-screen') return;
@@ -189,8 +138,6 @@ async function runBootSequence() {
 
   setPageInert(true);
 
-  // Reduced-motion users get no visual boot screen (hidden via CSS) — don't
-  // make them wait through the timers behind it either.
   if (prefersReducedMotion) {
     screen.style.display = 'none';
     setPageInert(false);
@@ -199,7 +146,10 @@ async function runBootSequence() {
 
   let skipped = false;
   const skip = () => { skipped = true; };
-  if (skipBtn) { skipBtn.hidden = false; skipBtn.addEventListener('click', skip); }
+  if (skipBtn) {
+    skipBtn.hidden = false;
+    skipBtn.addEventListener('click', skip);
+  }
   screen.addEventListener('click', skip);
   window.addEventListener('keydown', skip, { once: true });
 
@@ -239,7 +189,8 @@ function initBootRain() {
   const chars = '01AI∑πλ{}<>/';
 
   const handleResize = debounce(() => {
-    w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight;
+    w = canvas.width = window.innerWidth;
+    h = canvas.height = window.innerHeight;
     columns = Math.floor(w / fontSize);
     drops = Array.from({ length: columns }, () => Math.random() * -100);
   }, 150);
@@ -247,7 +198,8 @@ function initBootRain() {
 
   function draw() {
     const boot = $('#boot-screen');
-    if (!boot || boot.classList.contains('is-hidden')) return;
+    if (!boot || boot.classList.contains('is-hidden')) return; // stop once boot screen is gone, no point burning cycles
+
     ctx.fillStyle = 'rgba(6, 8, 20, 0.16)';
     ctx.fillRect(0, 0, w, h);
     ctx.fillStyle = 'rgba(76, 201, 240, 0.5)';
@@ -263,7 +215,7 @@ function initBootRain() {
   requestAnimationFrame(draw);
 }
 
-/* ---------- 4. Custom cursor ---------- */
+// ---- custom cursor, only on devices with a real mouse ----
 function initCursor() {
   if (isCoarsePointer || prefersReducedMotion) return;
   const dot = $('#cursor-dot'), ring = $('#cursor-ring'), glow = $('#cursor-glow');
@@ -289,7 +241,6 @@ function initCursor() {
   document.addEventListener('mouseout', (e) => { if (e.target.closest(hoverSelector)) document.documentElement.classList.remove('cursor-hover'); });
 }
 
-/* ---------- 5. Scroll progress, navbar state, back-to-top, clock ---------- */
 function initScrollChrome() {
   const progress = $('#scroll-progress');
   const navbar = $('#navbar');
@@ -319,7 +270,6 @@ function initClock() {
   setInterval(tick, 1000);
 }
 
-/* ---------- 6. Navigation ---------- */
 function initNav() {
   const toggle = $('#mobile-nav-toggle');
   const mobileNav = $('#mobile-nav');
@@ -339,7 +289,9 @@ function initNav() {
       e.preventDefault();
       scrollToSection(id);
       if (mobileNav.classList.contains('is-open')) {
-        mobileNav.classList.remove('is-open'); mobileNav.hidden = true; toggle.setAttribute('aria-expanded', 'false');
+        mobileNav.classList.remove('is-open');
+        mobileNav.hidden = true;
+        toggle.setAttribute('aria-expanded', 'false');
       }
     });
   });
@@ -349,7 +301,6 @@ function initNav() {
   });
 }
 
-/* ---------- 7. Scroll reveal ---------- */
 function initScrollReveal() {
   const items = $$('.reveal');
   if (prefersReducedMotion || !('IntersectionObserver' in window)) {
@@ -358,16 +309,18 @@ function initScrollReveal() {
   }
   const io = new IntersectionObserver((entries) => {
     entries.forEach((entry) => {
-      if (entry.isIntersecting) { entry.target.classList.add('is-visible'); io.unobserve(entry.target); }
+      if (entry.isIntersecting) {
+        entry.target.classList.add('is-visible');
+        io.unobserve(entry.target);
+      }
     });
   }, { threshold: 0.15, rootMargin: '0px 0px -60px 0px' });
   items.forEach((el) => io.observe(el));
 }
 
-/* ---------- 7b. Pause the skills-orbit animation when off-screen ----------
-   The rings/chips run infinite CSS animations; there's no visual value in
-   keeping them spinning while scrolled far out of view, so gate them with
-   an IntersectionObserver toggling a CSS custom property. */
+// pauses the orbiting skills rings when scrolled out of view - no reason
+// to keep those animations running in the background, was tanking battery
+// on my phone when I left the tab open
 function initOrbitPause() {
   const orbitSystem = $('#orbit-system');
   if (!orbitSystem || prefersReducedMotion || !('IntersectionObserver' in window)) return;
@@ -377,7 +330,6 @@ function initOrbitPause() {
   io.observe(orbitSystem);
 }
 
-/* ---------- 8. Tilt cards + mouse-follow glow ---------- */
 function initTilt() {
   if (isCoarsePointer || prefersReducedMotion) return;
   $$('.tilt').forEach((card) => {
@@ -395,7 +347,6 @@ function initTilt() {
   });
 }
 
-/* ---------- 9. Magnetic buttons ---------- */
 function initMagnetic() {
   if (isCoarsePointer || prefersReducedMotion) return;
   $$('.btn').forEach((btn) => {
@@ -409,7 +360,6 @@ function initMagnetic() {
   });
 }
 
-/* ---------- 10. Mouse parallax (hero) ---------- */
 function initParallax() {
   if (isCoarsePointer || prefersReducedMotion) return;
   const hero = $('#hero'), inner = $('.hero__inner');
@@ -423,7 +373,6 @@ function initParallax() {
   hero.addEventListener('mouseleave', () => { inner.style.transform = ''; });
 }
 
-/* ---------- 11. Ripple ---------- */
 function initRipple() {
   $$('.btn, .filter-btn, .contact-link, .nav__icon-btn').forEach((el) => {
     el.addEventListener('click', (e) => {
@@ -443,7 +392,6 @@ function initRipple() {
   });
 }
 
-/* ---------- 12. Neural network canvas (hero) ---------- */
 function initNeuralCanvas() {
   const canvas = $('#neural-canvas');
   const hero = $('#hero');
@@ -500,7 +448,6 @@ function initNeuralCanvas() {
   document.addEventListener('visibilitychange', () => { running = !document.hidden; });
 }
 
-/* ---------- 13. Hero role typewriter ---------- */
 function typeText(el, text, speed) {
   return new Promise((resolve) => {
     let i = 0;
@@ -523,6 +470,7 @@ async function initRoleTypewriter() {
   if (!el) return;
   if (prefersReducedMotion) { el.textContent = CONFIG.roles[0]; return; }
   let i = 0;
+  // yeah this is an infinite loop, it's fine - it's just cycling text
   while (true) {
     await typeText(el, CONFIG.roles[i % CONFIG.roles.length], 55);
     await wait(1400);
@@ -532,7 +480,8 @@ async function initRoleTypewriter() {
   }
 }
 
-/* ---------- 14. Interactive terminal (About) ---------- */
+// fake terminal in the About section. not a real shell obviously,
+// just pattern matching on a handful of commands
 function initTerminal() {
   const input = $('#terminal-input');
   const output = $('#terminal-output');
@@ -563,6 +512,7 @@ function initTerminal() {
     print(raw, 't-cmd');
     const lower = raw.toLowerCase();
     if (lower.startsWith('sudo')) {
+      // little easter egg, someone always tries sudo
       print('Nice try — guest is not in the sudoers file. This incident will be reported to nobody.', 't-accent');
     } else if (commands[lower]) {
       const result = commands[lower]();
@@ -575,7 +525,9 @@ function initTerminal() {
   });
 }
 
-/* ---------- 15. GitHub stats (live, cached, parallelized) ---------- */
+// live-ish github stats. hits the unauthenticated API so it's rate
+// limited to 60/hr - caching keeps it from getting hammered on repeat
+// visits or when I'm demoing this on the same wifi as other people
 async function initGithubStats() {
   const username = CONFIG.githubUsername;
   const reposEl = $('#gh-repos'), followersEl = $('#gh-followers'), starsEl = $('#gh-stars');
@@ -613,8 +565,6 @@ async function initGithubStats() {
     });
   }
 
-  // Serve from cache if fresh — spares the 60 req/hour unauthenticated
-  // GitHub rate limit on repeat visits / shared-network demo days.
   const cacheKey = `gh-stats-cache:${username}`;
   try {
     const cached = JSON.parse(safeStorage.get(cacheKey) || 'null');
@@ -622,7 +572,9 @@ async function initGithubStats() {
       render(cached.data);
       return;
     }
-  } catch (e) { /* corrupt cache entry — fall through to a fresh fetch */ }
+  } catch (e) {
+    // corrupt cache entry, whatever - just fetch fresh
+  }
 
   try {
     const timeoutSignal = () => (typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(6000) : undefined);
@@ -658,23 +610,16 @@ async function initGithubStats() {
   }
 }
 
-/* ---------- 14b. Hackathons accordion (E-Cell IIT Roorkee Workshops) ----------
-   ET AI Hackathon and ByteXL GenAI Workshop are plain <a> links to their PDFs
-   and need no JS. This only drives the E-Cell card's accordion panel. */
 function initHackathonAccordion() {
   const toggle = $('#ecell-toggle');
   const panel = $('#ecell-panel');
   if (!toggle || !panel) return;
 
-  // Give each sub-card its stagger index (used by the transition-delay in
-  // .hackathon-card--sub) instead of hardcoding it per card in the markup.
   $$('.hackathon-card--sub', panel).forEach((card, i) => {
     card.style.setProperty('--sub-stagger', String(i));
   });
 
-  // Mirrors the inert/aria-hidden fallback pattern already used for the
-  // boot screen (setPageInert) — keeps the collapsed panel's links out of
-  // the tab order and hidden from assistive tech until expanded.
+  // same inert/aria-hidden trick as the boot screen above
   function setInert(el, isInert) {
     if ('inert' in el) el.inert = isInert;
     el.setAttribute('aria-hidden', String(isInert));
@@ -698,26 +643,20 @@ function initHackathonAccordion() {
     if (open) {
       panel.style.maxHeight = panel.scrollHeight + 'px';
     } else {
-      // Snap to the current rendered height first so the browser has a
-      // real starting value to transition from (can't animate max-height
-      // from "none"/auto), then collapse it to 0 on the next frame.
+      // can't transition max-height from "none", so snap to the real
+      // height first then collapse it on the next frame
       panel.style.maxHeight = panel.scrollHeight + 'px';
       requestAnimationFrame(() => { panel.style.maxHeight = '0px'; });
     }
   }
 
-  // Native <button> already fires a click on both Enter and Space, so no
-  // custom keydown handling is needed for keyboard activation.
   toggle.addEventListener('click', () => setOpen(!open));
 
-  // Keep an open panel's max-height accurate if content reflows (e.g.
-  // heading text wraps differently) after a viewport resize.
   window.addEventListener('resize', debounce(() => {
     if (open) panel.style.maxHeight = panel.scrollHeight + 'px';
   }, 150));
 }
 
-/* ---------- 15b. Certificates (data-driven cards + expand/collapse) ---------- */
 function initCertificates() {
   const grid = $('#cert-grid');
   const toggleBtn = $('#cert-toggle');
@@ -728,40 +667,36 @@ function initCertificates() {
   let expanded = false;
 
   function renderCard(cert, index) {
-  const a = document.createElement('a');
-  a.className = 'cert-card glass';
-  a.href = cert.pdf;
-  a.target = '_blank';
-  a.rel = 'noopener noreferrer';
-  a.setAttribute(
-    'aria-label',
-    `Open ${cert.title} certificate PDF in a new tab`
-  );
+    const a = document.createElement('a');
+    a.className = 'cert-card glass';
+    a.href = cert.pdf;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.setAttribute('aria-label', `Open ${cert.title} certificate PDF in a new tab`);
 
-  if (index >= FEATURED_COUNT) {
-    a.classList.add('cert-card--extra');
-    a.style.setProperty('--stagger', String(index - FEATURED_COUNT));
-    a.hidden = true;
+    if (index >= FEATURED_COUNT) {
+      a.classList.add('cert-card--extra');
+      a.style.setProperty('--stagger', String(index - FEATURED_COUNT));
+      a.hidden = true;
+    }
+
+    const logo = document.createElement('img');
+    logo.className = 'cert-card__logo';
+    logo.src = cert.logo;
+    logo.alt = `${cert.tag} logo`;
+    logo.loading = 'lazy';
+
+    const h3 = document.createElement('h3');
+    h3.textContent = cert.title;
+
+    a.append(logo, h3);
+    return a;
   }
-
-  // Certificate logo
-  const logo = document.createElement('img');
-  logo.className = 'cert-card__logo';
-  logo.src = cert.logo;
-  logo.alt = `${cert.tag} logo`;
-  logo.loading = 'lazy';
-
-  const h3 = document.createElement('h3');
-  h3.textContent = cert.title;
-
-  a.append(logo, h3);
-  return a;
-}
 
   certificates.forEach((cert, index) => grid.appendChild(renderCard(cert, index)));
 
   const hasExtra = certificates.length > FEATURED_COUNT;
-  if (!hasExtra) return; // nothing to expand — button stays hidden
+  if (!hasExtra) return;
 
   const extraCards = $$('.cert-card--extra', grid);
   toggleBtn.hidden = false;
@@ -774,9 +709,7 @@ function initCertificates() {
 
     if (expanded) {
       extraCards.forEach((card) => { card.hidden = false; });
-      // Force a reflow so the browser registers the pre-transition state
-      // (opacity/translateY from .cert-card--extra) before .is-expanded
-      // is added — otherwise the fade-in + slide-up never animates.
+      // force reflow so the fade-in transition actually plays
       void grid.offsetWidth;
       requestAnimationFrame(() => grid.classList.add('is-expanded'));
     } else {
@@ -789,32 +722,23 @@ function initCertificates() {
   toggleBtn.addEventListener('click', () => setExpanded(!expanded));
 }
 
-/* ---------- 16. Contact form & copy email ---------- */
 function initContact() {
   const form = $('#contact-form');
   if (form) {
     form.addEventListener('submit', (e) => {
       e.preventDefault();
-      // Defensive check even though `novalidate` was removed from the
-      // markup (so the browser already blocks invalid native submits) —
-      // keeps this handler safe if it's ever triggered programmatically.
       if (typeof form.reportValidity === 'function' && !form.reportValidity()) return;
 
       const data = new FormData(form);
       const name = data.get('name') || '';
       const message = data.get('message') || '';
 
-     const whatsappNumber = '919456712198';
+      const whatsappNumber = '919456712198';
+      const whatsappMessage = encodeURIComponent(`${message}`);
+      const whatsappURL = `https://wa.me/${whatsappNumber}?text=${whatsappMessage}`;
 
-     const whatsappMessage = encodeURIComponent(
-  `${message}`
-);
-
-const whatsappURL = `https://wa.me/${whatsappNumber}?text=${whatsappMessage}`;
-
-window.open(whatsappURL, '_blank', 'noopener,noreferrer');
-
-showToast('Opening WhatsApp…');
+      window.open(whatsappURL, '_blank', 'noopener,noreferrer');
+      showToast('Opening WhatsApp…');
     });
   }
 
@@ -822,13 +746,17 @@ showToast('Opening WhatsApp…');
   if (copyBtn) {
     copyBtn.addEventListener('click', async () => {
       const email = copyBtn.dataset.email;
-      try { await navigator.clipboard.writeText(email); showToast('Email copied to clipboard'); }
-      catch (e) { showToast(email); }
+      try {
+        await navigator.clipboard.writeText(email);
+        showToast('Email copied to clipboard');
+      } catch (e) {
+        showToast(email);
+      }
     });
   }
 }
 
-/* ---------- 17. Command palette ---------- */
+// cmd/ctrl+k palette
 function initCommandPalette() {
   const overlay = $('#command-overlay');
   const input = $('#command-input');
@@ -912,7 +840,8 @@ function initCommandPalette() {
   });
 }
 
-/* ---------- 18. AI assistant widget (rule-based demo, not a live model) ---------- */
+// this is NOT hooked up to a real model, just keyword matching.
+// good enough for a portfolio gimmick, don't judge me
 function initAIWidget() {
   const toggle = $('#ai-widget-toggle');
   const panel = $('#ai-widget-panel');
@@ -965,7 +894,6 @@ function initAIWidget() {
   });
 }
 
-/* ---------- 19. Theme toggle ---------- */
 function initTheme() {
   const toggle = $('#theme-toggle');
   if (!toggle) return;
@@ -985,8 +913,8 @@ function initTheme() {
   if (stored === 'light' || stored === 'dark') {
     setTheme(stored);
   } else {
-    // No explicit choice saved yet — respect the OS-level preference
-    // instead of always defaulting to dark.
+    // no saved preference yet, go with the OS setting instead of just
+    // always dumping people into dark mode
     const osPrefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
     setTheme(osPrefersLight ? 'light' : 'dark');
   }
@@ -994,7 +922,7 @@ function initTheme() {
   toggle.addEventListener('click', () => setTheme(html.getAttribute('data-theme') === 'light' ? 'dark' : 'light'));
 }
 
-/* ---------- 20. Ambient audio toggle (Web Audio API, no audio files needed) ---------- */
+// ambient background drone using raw Web Audio oscillators, no mp3 needed
 function initMusicToggle() {
   const btn = $('#music-toggle');
   if (!btn) return;
@@ -1050,7 +978,7 @@ function initMusicToggle() {
   btn.addEventListener('click', () => { playing ? stop() : start(); updateIcons(); });
 }
 
-/* ---------- 21. Secret developer mode (Konami code) ---------- */
+// konami code easter egg
 function initDevMode() {
   const sequence = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a'];
   let pos = 0;
@@ -1081,7 +1009,6 @@ function unlockDevMode() {
   document.body.appendChild(banner);
 }
 
-/* ---------- 22. Project filtering ---------- */
 function initProjectFilter() {
   const buttons = $$('.filter-btn');
   const cards = $$('.project-card');
@@ -1105,7 +1032,7 @@ function initProjectFilter() {
   });
 }
 
-/* ---------- 23. Project floating window (draggable) ---------- */
+// draggable "window" popup for project details, kind of a desktop-app feel
 function initProjectModal() {
   const overlay = $('#project-overlay');
   const win = $('#project-window');
@@ -1157,8 +1084,7 @@ function initProjectModal() {
   window.addEventListener('mousemove', (e) => {
     if (!dragging) return;
     const rect = win.getBoundingClientRect();
-    // Clamp so the window can't be dragged fully off-screen with no way
-    // to bring it back other than closing and reopening.
+    // keep the window from being dragged fully off-screen with no way back
     const minX = -rect.left + curX + 20;
     const maxX = window.innerWidth - (rect.right - curX) - 20;
     const minY = -rect.top + curY + 20;
@@ -1170,15 +1096,14 @@ function initProjectModal() {
   window.addEventListener('mouseup', () => { dragging = false; titlebar.style.cursor = ''; });
 }
 
-/* ---------- 24. Init ---------- */
+// ---- boot it up ----
 document.addEventListener('DOMContentLoaded', () => {
   document.body.style.overflow = 'hidden';
   const yearEl = $('#footer-year');
   if (yearEl) yearEl.textContent = String(new Date().getFullYear());
 
-  // Each module is isolated: if one throws, the rest still run and — most
-  // importantly — runBootSequence() below is still guaranteed to fire, so
-  // a single bug can never leave the page permanently unscrollable.
+  // wrapping each init in try/catch so one broken module doesn't take
+  // the whole page down with it - learned that one the hard way
   const modules = [
     initCursor, initScrollChrome, initClock, initNav, initScrollReveal,
     initOrbitPause, initTilt, initMagnetic, initParallax, initRipple,
