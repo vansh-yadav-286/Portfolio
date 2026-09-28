@@ -745,21 +745,9 @@ footer { border-top: 1px solid var(--border); padding-block: 3rem; margin-top: 4
   #navbar, #boot-screen, #cursor-dot, #cursor-ring, #cursor-glow, #ai-widget, #back-to-top, #scroll-progress, .grid-floor, .skip-link { display: none !important; }
 }
 
-/* Contact status + admin dashboard (uses the same theme tokens as the rest of the site) */
+/* Contact status (uses the same theme tokens as the rest of the site) */
 .form-status { min-height: 1.2em; font-family: var(--font-mono); font-size: .78rem; color: var(--text-lo); text-align: center; }
 .form-status.is-success { color: var(--ok); }
 :root[data-theme="light"] .form-status.is-success { color: #0a7a55; }
 .form-status.is-error { color: var(--magenta); }
 
-#admin [hidden] { display: none !important; }
-.admin__panel h2 { font-family: var(--font-display); margin-bottom: 1.2rem; }
-.admin__login { max-width: 420px; }
-.admin__login .window__body { display: flex; flex-direction: column; gap: 1rem; }
-.admin__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: .5rem; }
-.admin__head h2 { margin-bottom: 0; }
-.admin__actions { display: flex; flex-wrap: wrap; gap: .6rem; }
-.responses { display: grid; gap: 1rem; margin-top: 1rem; }
-.responses__empty { text-align: center; color: var(--text-lo); padding: 2rem 0; }
-.response-card { padding: 1.1rem 1.25rem; border-radius: 12px; border: 1px solid var(--border); display: flex; flex-direction: column; gap: .35rem; overflow-wrap: anywhere; }
-.response-card strong { font-family: var(--font-mono); font-size: .8rem; color: var(--ion); }
-.response-card__delete { align-self: flex-start; margin-top: .5rem; padding: .4rem .9rem; font-size: .8rem; }

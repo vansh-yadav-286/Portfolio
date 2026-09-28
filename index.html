@@ -596,50 +596,6 @@
 </div>
 </section>
 
-  <!-- Admin (login -> user responses dashboard) -->
-
-  <section id="admin" aria-labelledby="admin-heading">
-    <div class="section__inner">
-      <p class="eyebrow reveal">09 &middot; admin</p>
-
-      <!-- Login panel: shown while logged out, hidden after login -->
-      <div id="admin-login-panel" class="admin__panel">
-        <h2 id="admin-heading">Admin login</h2>
-        <form id="admin-login-form" class="window admin__login" novalidate>
-          <div class="window__titlebar">
-            <div class="window__dots"><span></span><span></span><span></span></div>
-            <span class="window__title">admin.login</span>
-          </div>
-          <div class="window__body">
-            <label class="field">
-              <span>Username</span>
-              <input type="text" name="username" autocomplete="username" required />
-            </label>
-            <label class="field">
-              <span>Password</span>
-              <input type="password" name="password" autocomplete="current-password" required />
-            </label>
-            <button type="submit" class="btn btn--primary btn--block"><span>Login</span></button>
-            <p id="admin-login-error" class="form-status is-error" role="alert"></p>
-          </div>
-        </form>
-      </div>
-
-      <!-- Dashboard: hidden until a successful login -->
-      <div id="admin-dashboard" class="admin__panel" hidden>
-        <div class="admin__head">
-          <h2 id="admin-dashboard-heading">User responses</h2>
-          <div class="admin__actions">
-            <button id="admin-refresh" class="btn btn--ghost" type="button"><span>Refresh</span></button>
-            <button id="admin-delete-all" class="btn btn--ghost" type="button"><span>Delete all</span></button>
-            <button id="admin-logout" class="btn btn--primary" type="button"><span>Logout</span></button>
-          </div>
-        </div>
-        <p id="admin-status" class="form-status" role="status" aria-live="polite"></p>
-        <div id="responses-list" class="responses"></div>
-      </div>
-    </div>
-  </section>
 </main>
 
 <!-- Footer -->
@@ -655,7 +611,6 @@
       <a href="#projects">Projects</a>
       <a href="#timeline">Timeline</a>
       <a href="#contact">Contact</a>
-      <a href="#admin">Admin</a>
 </nav>
     <p class="footer__status">
       <span class="nav__status-dot"></span>
