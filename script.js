@@ -48,10 +48,13 @@ const firebaseConfig = {
   projectId: "portfolio-cddf2",
   storageBucket: "portfolio-cddf2.firebasestorage.app",
   messagingSenderId: "1064467501924",
-  appId: "1:1064467501924:web:2dc69938814427eed2a071"
+  appId: "1:1064467501924:web:2dc69938814427eed2a071",
   measurementId: "G-LN436G7LNH"
 };
 const FIREBASE_SDK_VERSION = '10.14.1';
+// Apple needs an Apple Developer Services ID configured in Firebase first (see README).
+// Flip to true once Apple is enabled in the Firebase console.
+const APPLE_SIGNIN_ENABLED = false;
 
 const RESPONSES_KEY = 'portfolioResponses'; // localStorage key (one JSON array)
 const REQUEST_TIMEOUT_MS = 15000;
@@ -1283,8 +1286,8 @@ async function hashPassword(password, salt) {
   return 'fnv' + (h >>> 0).toString(16);
 }
 
-function startSession(user, provider = 'password') {
-  window.localStorage.setItem(AUTH_KEY, JSON.stringify({ user, provider, ts: Date.now() }));
+function startSession(user, provider = 'password', extra = {}) {
+  window.localStorage.setItem(AUTH_KEY, JSON.stringify({ user, provider, ...extra, ts: Date.now() }));
 }
 
 function readSession() {
@@ -1343,7 +1346,8 @@ async function signInWithProvider(providerName) {
   if (providerName === 'Apple') { provider.addScope('email'); provider.addScope('name'); }
   const { user } = await mod.signInWithPopup(auth, provider);
   const label = user.displayName || user.email || providerName + ' user';
-  startSession(label, providerName.toLowerCase());
+  // only non-sensitive profile info goes in the session (no tokens)
+  startSession(label, providerName.toLowerCase(), { uid: user.uid, email: user.email || '', photoURL: user.photoURL || '' });
 }
 
 // keep a Firebase-backed session in sync with Firebase itself: if Firebase no longer
@@ -1435,6 +1439,10 @@ function initAuth() {
       const providerName = btn.dataset.provider;
       const errorEl = loginView.hidden ? signupError : loginError;
       errorEl.textContent = '';
+      if (providerName === 'Apple' && !APPLE_SIGNIN_ENABLED) {
+        errorEl.textContent = 'Apple sign-in isn\u2019t set up yet. Please use Google or your username and password.';
+        return;
+      }
       if (!isFirebaseConfigured()) {
         errorEl.textContent = providerName + ' sign-in isn\u2019t set up yet. Add your Firebase config in script.js.';
         return;
