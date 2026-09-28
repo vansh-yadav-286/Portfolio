@@ -1420,14 +1420,15 @@ function initAuth() {
   $('#show-signup').addEventListener('click', (e) => { e.preventDefault(); showSignup(); });
   $('#show-login').addEventListener('click', (e) => { e.preventDefault(); showLogin(); });
 
-  // show/hide password on the signup form
-  const pwInput = $('input[name="password"]', signupForm);
-  const eye = $('#toggle-password');
-  eye.addEventListener('click', () => {
-    const show = pwInput.type === 'password';
-    pwInput.type = show ? 'text' : 'password';
-    eye.setAttribute('aria-pressed', String(show));
-    eye.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+  // show/hide password (login + signup fields)
+  $$('.auth__eye').forEach((eye) => {
+    const input = $('input', eye.closest('.auth__field'));
+    eye.addEventListener('click', () => {
+      const show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      eye.setAttribute('aria-pressed', String(show));
+      eye.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+    });
   });
 
   // Google / Apple via Firebase. Preload the SDK so the popup opens right inside the click.
