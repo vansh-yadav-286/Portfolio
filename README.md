@@ -253,3 +253,81 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ════════════════════════════════════════════════════════════════════ -->
+
+
+---
+
+## Project: Portfolio with Contact Form, Admin Dashboard and Google Sheets Database
+
+### Features
+- Single-page portfolio (semantic `<section>` containers, navbar linking to every section, dark/light theme toggle)
+- Contact form (name, email, message) with validation, loading state, success and error messages
+- Responses stored in **Google Sheets** via Google Apps Script (or in browser `localStorage` for development)
+- Admin login (show/hide with JavaScript + CSS). After login the login form is replaced by a **User Responses** dashboard with timestamps, per-response delete, Delete All (with confirmation), Refresh and Logout
+- Two separate React mini-projects: `react-contact-cards/` and `react-like-card/`
+
+### Technologies
+HTML, CSS, vanilla JavaScript, Google Apps Script, Google Sheets, React 18 + Vite, GitHub Pages.
+
+### Where the settings live
+Everything you need to edit is at the top of [script.js](script.js):
+
+```js
+const GOOGLE_SCRIPT_URL = "PASTE_YOUR_DEPLOYED_APPS_SCRIPT_URL_HERE";
+const USE_LOCAL_STORAGE = false;   // true = localStorage (dev), false = Google Sheets
+const ADMIN_CONFIG = { username: 'admin', password: 'change-me-123' };
+```
+
+### localStorage mode
+Set `USE_LOCAL_STORAGE = true`. All responses are stored as one JSON array under the key `portfolioResponses`:
+
+```json
+[{ "id": "uuid", "name": "Rahul", "email": "rahul@example.com", "message": "Hello", "timestamp": "2026-09-28T09:00:00.000Z" }]
+```
+With `false`, localStorage is never used as a silent fallback: if Google Sheets fails, the error is shown.
+
+### Google Sheets architecture
+```
+Contact form -> fetch() POST -> Apps Script Web App -> Google Sheet   (ID | Name | Email | Message | Timestamp)
+Admin dashboard -> fetch() GET -> Apps Script Web App -> Google Sheet -> JSON -> dashboard
+```
+Backend code: [google-apps-script/Code.gs](google-apps-script/Code.gs) (`doPost(e)` adds/deletes, `doGet(e)` lists).
+
+### Apps Script setup
+1. Create a new Google Sheet (any name).
+2. Menu **Extensions -> Apps Script**.
+3. Replace the contents of `Code.gs` with [google-apps-script/Code.gs](google-apps-script/Code.gs).
+4. Change `ADMIN_KEY` in it to the same value as `ADMIN_CONFIG.password` in `script.js`.
+5. Click **Deploy -> New deployment -> type: Web app**. Execute as: **Me**. Who has access: **Anyone**. Click **Deploy** and authorize when asked.
+6. Copy the **Web app URL** (ends in `/exec`).
+7. Paste it into `GOOGLE_SCRIPT_URL` in `script.js`.
+8. After any later change to `Code.gs`: **Deploy -> Manage deployments -> edit -> New version -> Deploy** (the URL stays the same).
+
+The `Responses` tab and header row are created automatically on the first request.
+
+### Run the portfolio locally
+No build step. Either open `index.html`, or run a local server (recommended):
+```bash
+python3 -m http.server 8000     # then open http://localhost:8000
+```
+
+### Run the React projects
+```bash
+cd react-contact-cards      # or: cd react-like-card
+npm install
+npm run dev                 # open the URL Vite prints
+```
+
+### Deploy to GitHub Pages
+1. Create a GitHub repository and push this folder to the `main` branch.
+2. Repo **Settings -> Pages**. Source: **Deploy from a branch**, branch `main`, folder `/ (root)`. Save.
+3. After a minute the site is live at `https://<your-username>.github.io/<repo-name>/` (or `https://<your-username>.github.io/` if the repo is named `<your-username>.github.io`).
+4. The `canonical` and `og:` URLs in `index.html` point at `https://vansh-yadav-286.github.io/`; update them if your final URL differs.
+
+The React apps are separate projects and are not part of the Pages site unless you run `npm run build` and publish the `dist/` output yourself.
+
+### Known limitations
+- **Admin login is a client-side demo.** The username/password are readable in `script.js`. The Apps Script also requires the password as a key for reading/deleting, but that same key is visible in the page source, so treat this as a convenience lock, not real security. Do not use a password you use anywhere else.
+- Anyone can submit the contact form (spam protection is not included).
+- Google Sheets mode needs the Apps Script deployed as "Anyone"; a redeploy without "New version" will not pick up code changes.
+- The mobile navbar buttons overflow the screen by ~18px at 390px width. This was already the case in the original code and was left unchanged.
