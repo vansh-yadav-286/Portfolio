@@ -37,6 +37,22 @@ const ADMIN_CONFIG = {
   password: 'shorya@286'
 };
 
+// 4. Firebase (Google / Apple sign-in). Paste your own values from
+//    Firebase console -> Project settings -> Your apps -> Web app -> SDK setup.
+//    These client-side values are NOT secrets. Never put a service-account key here.
+//    Also add your site's domain (vansh-yadav-286.github.io) under
+//    Authentication -> Settings -> Authorized domains. See README for the full setup.
+const firebaseConfig = {
+  apiKey: "AIzaSyCmcyiajpKNJBwxRVksrjdUfwMMzN050N8",
+  authDomain: "portfolio-cddf2.firebaseapp.com",
+  projectId: "portfolio-cddf2",
+  storageBucket: "portfolio-cddf2.firebasestorage.app",
+  messagingSenderId: "1064467501924",
+  appId: "1:1064467501924:web:2dc69938814427eed2a071"
+  measurementId: "G-LN436G7LNH"
+};
+const FIREBASE_SDK_VERSION = '10.14.1';
+
 const RESPONSES_KEY = 'portfolioResponses'; // localStorage key (one JSON array)
 const REQUEST_TIMEOUT_MS = 15000;
 
@@ -1267,17 +1283,98 @@ async function hashPassword(password, salt) {
   return 'fnv' + (h >>> 0).toString(16);
 }
 
-function startSession(user) {
-  window.localStorage.setItem(AUTH_KEY, JSON.stringify({ user, ts: Date.now() }));
+function startSession(user, provider = 'password') {
+  window.localStorage.setItem(AUTH_KEY, JSON.stringify({ user, provider, ts: Date.now() }));
 }
 
-function logout() {
+function readSession() {
+  try { return JSON.parse(window.localStorage.getItem(AUTH_KEY) || 'null'); } catch (e) { return null; }
+}
+
+// ---- Firebase (Google / Apple) ----
+// The SDK is loaded from Google's CDN with dynamic import() so this stays a plain
+// static site. It is only fetched when Firebase is configured and needed.
+function isFirebaseConfigured() {
+  return !!firebaseConfig.apiKey && !/^YOUR_/.test(firebaseConfig.apiKey) && !/^YOUR_/.test(firebaseConfig.projectId);
+}
+
+let firebasePromise = null;
+function loadFirebase() {
+  if (!firebasePromise) {
+    const base = 'https://www.gstatic.com/firebasejs/' + FIREBASE_SDK_VERSION + '/';
+    firebasePromise = Promise.all([import(base + 'firebase-app.js'), import(base + 'firebase-auth.js')])
+      .then(([appMod, authMod]) => {
+        const app = appMod.getApps().length ? appMod.getApp() : appMod.initializeApp(firebaseConfig);
+        return { auth: authMod.getAuth(app), mod: authMod };
+      })
+      .catch((err) => { firebasePromise = null; throw err; });
+  }
+  return firebasePromise;
+}
+
+function firebaseErrorMessage(err, providerName) {
+  switch (err && err.code) {
+    case 'auth/popup-closed-by-user':
+    case 'auth/cancelled-popup-request':
+      return 'Sign-in was cancelled.';
+    case 'auth/popup-blocked':
+      return 'Your browser blocked the sign-in popup. Allow popups for this site and try again.';
+    case 'auth/account-exists-with-different-credential':
+      return 'An account with this email already exists using a different sign-in method.';
+    case 'auth/unauthorized-domain':
+      return 'This domain isn\u2019t authorized in Firebase. Add it under Authentication \u2192 Settings \u2192 Authorized domains.';
+    case 'auth/operation-not-allowed':
+      return providerName + ' sign-in isn\u2019t enabled in the Firebase console yet.';
+    case 'auth/network-request-failed':
+      return 'Network error. Check your connection and try again.';
+    case 'auth/too-many-requests':
+      return 'Too many attempts. Please wait a moment and try again.';
+    default:
+      console.error('[auth] ' + providerName + ' sign-in failed:', err);
+      return providerName + ' sign-in failed. Please try again.';
+  }
+}
+
+async function signInWithProvider(providerName) {
+  const { auth, mod } = await loadFirebase();
+  const provider = providerName === 'Apple'
+    ? new mod.OAuthProvider('apple.com')
+    : new mod.GoogleAuthProvider();
+  if (providerName === 'Apple') { provider.addScope('email'); provider.addScope('name'); }
+  const { user } = await mod.signInWithPopup(auth, provider);
+  const label = user.displayName || user.email || providerName + ' user';
+  startSession(label, providerName.toLowerCase());
+}
+
+// keep a Firebase-backed session in sync with Firebase itself: if Firebase no longer
+// has a user (signed out elsewhere / expired), drop our session and go back to Login.
+function watchFirebaseSession() {
+  const session = readSession();
+  if (!session || (session.provider !== 'google' && session.provider !== 'apple')) return;
+  if (!isFirebaseConfigured()) return;
+  loadFirebase().then(({ auth, mod }) => {
+    mod.onAuthStateChanged(auth, (user) => {
+      if (!user && readSession()) logout();
+    });
+  }).catch((err) => console.error('[auth] could not check Firebase session:', err));
+}
+
+async function logout() {
+  const session = readSession();
   try { window.localStorage.removeItem(AUTH_KEY); } catch (e) { /* ignore */ }
+  // also sign out of Firebase for Google/Apple sessions (bounded wait so logout never hangs)
+  if (session && (session.provider === 'google' || session.provider === 'apple') && isFirebaseConfigured()) {
+    try {
+      const { auth, mod } = await loadFirebase();
+      await Promise.race([mod.signOut(auth), new Promise((r) => setTimeout(r, 2500))]);
+    } catch (e) { console.error('[auth] Firebase sign-out failed:', e); }
+  }
   // drop the hash + reload so the portfolio (and all its listeners) is torn down
   window.location.replace(window.location.pathname + window.location.search);
 }
 
 function initAuth() {
+  watchFirebaseSession();
   // logout buttons live inside the portfolio, so delegate
   document.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-logout]');
@@ -1329,11 +1426,31 @@ function initAuth() {
     eye.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
   });
 
-  // no OAuth backend behind these, so be upfront about it
-  $$('.auth__social-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const target = loginView.hidden ? signupError : loginError;
-      target.textContent = btn.dataset.provider + ' sign-in isn’t available in this demo. Please use username and password.';
+  // Google / Apple via Firebase. Preload the SDK so the popup opens right inside the click.
+  const socialBtns = $$('.auth__social-btn');
+  if (isFirebaseConfigured()) loadFirebase().catch(() => { /* surfaced on click */ });
+
+  socialBtns.forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const providerName = btn.dataset.provider;
+      const errorEl = loginView.hidden ? signupError : loginError;
+      errorEl.textContent = '';
+      if (!isFirebaseConfigured()) {
+        errorEl.textContent = providerName + ' sign-in isn\u2019t set up yet. Add your Firebase config in script.js.';
+        return;
+      }
+      const label = $('span', btn);
+      const original = label.textContent;
+      socialBtns.forEach((b) => { b.disabled = true; });
+      label.textContent = 'Connecting...';
+      try {
+        await signInWithProvider(providerName);
+        window.location.reload();
+      } catch (err) {
+        errorEl.textContent = firebaseErrorMessage(err, providerName);
+        label.textContent = original;
+        socialBtns.forEach((b) => { b.disabled = false; });
+      }
     });
   });
 
