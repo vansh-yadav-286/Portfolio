@@ -33,8 +33,8 @@ const USE_LOCAL_STORAGE = false;
 //    NOT real security. The same password is also sent to Apps Script as a key,
 //    so it must match ADMIN_KEY in google-apps-script/Code.gs.
 const ADMIN_CONFIG = {
-  username: 'admin',
-  password: 'change-me-123'
+  username: 'Shorya',
+  password: 'shorya@286'
 };
 
 const RESPONSES_KEY = 'portfolioResponses'; // localStorage key (one JSON array)
