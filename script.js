@@ -1338,27 +1338,53 @@ function firebaseErrorMessage(err, providerName) {
   }
 }
 
+// only non-sensitive profile info goes in the session (no tokens)
+function startFirebaseSession(user, provider) {
+  const label = user.displayName || user.email || provider + ' user';
+  startSession(label, provider, { uid: user.uid, email: user.email || '', photoURL: user.photoURL || '' });
+}
+
+let authReloading = false; // stops the popup handler and the auth listener from both reloading
+
 async function signInWithProvider(providerName) {
   const { auth, mod } = await loadFirebase();
   const provider = providerName === 'Apple'
     ? new mod.OAuthProvider('apple.com')
     : new mod.GoogleAuthProvider();
   if (providerName === 'Apple') { provider.addScope('email'); provider.addScope('name'); }
-  const { user } = await mod.signInWithPopup(auth, provider);
-  const label = user.displayName || user.email || providerName + ' user';
-  // only non-sensitive profile info goes in the session (no tokens)
-  startSession(label, providerName.toLowerCase(), { uid: user.uid, email: user.email || '', photoURL: user.photoURL || '' });
+  authReloading = true; // the listener below fires as soon as the popup succeeds
+  try {
+    const { user } = await mod.signInWithPopup(auth, provider);
+    startFirebaseSession(user, providerName.toLowerCase());
+  } catch (err) {
+    authReloading = false;
+    throw err;
+  }
 }
 
-// keep a Firebase-backed session in sync with Firebase itself: if Firebase no longer
-// has a user (signed out elsewhere / expired), drop our session and go back to Login.
+// Firebase's auth listener keeps our portfolioAuth session in step with Firebase:
+//  - Firebase restored a Google/Apple user but there's no session (e.g. localStorage
+//    was cleared) -> log them straight in
+//  - Firebase has no user but we hold a Google/Apple session (signed out elsewhere /
+//    expired) -> drop the session and go back to Login
+// Username/password sessions never touch Firebase, so they are left alone. The first
+// paint is still decided synchronously from portfolioAuth (see the <head> gate), so
+// there is no flash and no arbitrary delay waiting on the network.
 function watchFirebaseSession() {
-  const session = readSession();
-  if (!session || (session.provider !== 'google' && session.provider !== 'apple')) return;
   if (!isFirebaseConfigured()) return;
   loadFirebase().then(({ auth, mod }) => {
     mod.onAuthStateChanged(auth, (user) => {
-      if (!user && readSession()) logout();
+      const session = readSession();
+      const social = session && (session.provider === 'google' || session.provider === 'apple');
+      if (user && !session) {
+        const id = user.providerData[0] && user.providerData[0].providerId;
+        const provider = id === 'google.com' ? 'google' : id === 'apple.com' ? 'apple' : null;
+        if (!provider || authReloading) return;
+        authReloading = true;
+        try { startFirebaseSession(user, provider); window.location.reload(); } catch (e) { authReloading = false; }
+      } else if (!user && social) {
+        logout();
+      }
     });
   }).catch((err) => console.error('[auth] could not check Firebase session:', err));
 }
