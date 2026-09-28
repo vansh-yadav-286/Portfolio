@@ -331,3 +331,19 @@ The React apps are separate projects and are not part of the Pages site unless y
 - Anyone can submit the contact form (spam protection is not included).
 - Google Sheets mode needs the Apps Script deployed as "Anyone"; a redeploy without "New version" will not pick up code changes.
 - The mobile navbar buttons overflow the screen by ~18px at 390px width. This was already the case in the original code and was left unchanged.
+
+---
+
+## Google / Apple sign-in (Firebase)
+
+The login page's Google and Apple buttons use Firebase Authentication (`signInWithPopup`). Username/password login and signup still work as before; Google/Apple is an additional method. Sessions are stored in `localStorage` as `portfolioAuth` (`{ user, provider, ts }`). This is a frontend demo, not production-grade auth.
+
+**Setup**
+1. Create a project at https://console.firebase.google.com, then **Project settings -> Your apps -> Add app -> Web**.
+2. Copy the `firebaseConfig` values into the `firebaseConfig` block near the top of `script.js` (client config is not secret; never add a service-account key).
+3. **Authentication -> Sign-in method**: enable **Google**, and **Apple** if you want it.
+4. **Authentication -> Settings -> Authorized domains**: add `vansh-yadav-286.github.io` (`localhost` is there by default).
+
+**Apple requirements**: needs a paid Apple Developer account. Create a Services ID, enable Sign in with Apple, and add Firebase's `https://<PROJECT>.firebaseapp.com/__/auth/handler` as the return URL and `<PROJECT>.firebaseapp.com` as the domain. In Firebase's Apple provider, enter the Services ID, Team ID, Key ID and the private key (`.p8`) - these go in the Firebase console only, never in this repo. Apple only returns the user's name on the first sign-in.
+
+Until `firebaseConfig` is filled in, the buttons show "sign-in isn't set up yet".

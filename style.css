@@ -828,3 +828,4 @@ html[data-auth="out"] body { background: #030816; }
 }
 
 /* Logout button in the portfolio navbar (icon only, label in title/aria-label) */
+.auth__social-btn:disabled { opacity: .7; cursor: progress; }
