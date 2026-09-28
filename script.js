@@ -38,7 +38,6 @@ const ADMIN_CONFIG = {
 };
 
 const RESPONSES_KEY = 'portfolioResponses'; // localStorage key (one JSON array)
-const ADMIN_SESSION_KEY = 'portfolioAdminLoggedIn';
 const REQUEST_TIMEOUT_MS = 15000;
 
 // wrapper around localStorage so things don't blow up in private
@@ -826,159 +825,6 @@ async function submitResponse(data) {
   await postToSheet({ action: 'add', ...data });
 }
 
-async function loadResponses() {
-  let list;
-  if (USE_LOCAL_STORAGE) {
-    list = readLocalResponses();
-  } else {
-    assertScriptUrlConfigured();
-    const url = GOOGLE_SCRIPT_URL + '?action=list&key=' + encodeURIComponent(ADMIN_CONFIG.password);
-    const json = await fetchJson(url);
-    list = json.responses;
-  }
-  if (!Array.isArray(list)) throw new Error('Invalid response data');
-  // newest first
-  return list
-    .filter((r) => r && typeof r === 'object')
-    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-}
-
-async function deleteResponse(id) {
-  if (USE_LOCAL_STORAGE) {
-    writeLocalResponses(readLocalResponses().filter((r) => r.id !== id));
-    return;
-  }
-  await postToSheet({ action: 'delete', id });
-}
-
-async function deleteAllResponses() {
-  if (USE_LOCAL_STORAGE) {
-    writeLocalResponses([]);
-    return;
-  }
-  await postToSheet({ action: 'deleteAll' });
-}
-
-// ---- admin login + responses dashboard ----
-
-function formatTimestamp(iso) {
-  const d = new Date(iso);
-  if (isNaN(d)) return 'Unknown time';
-  return d.toLocaleString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
-}
-
-function initAdmin() {
-  const loginPanel = $('#admin-login-panel');
-  const dashboard = $('#admin-dashboard');
-  const loginForm = $('#admin-login-form');
-  const loginError = $('#admin-login-error');
-  const statusEl = $('#admin-status');
-  const list = $('#responses-list');
-  if (!loginPanel || !dashboard || !loginForm || !list) return;
-
-  function readSession() {
-    try { return sessionStorage.getItem(ADMIN_SESSION_KEY) === 'yes'; } catch (e) { return false; }
-  }
-  function writeSession(on) {
-    try { on ? sessionStorage.setItem(ADMIN_SESSION_KEY, 'yes') : sessionStorage.removeItem(ADMIN_SESSION_KEY); } catch (e) { /* ignore */ }
-  }
-
-  // show/hide: logged in -> dashboard replaces the login panel
-  function showDashboard(on) {
-    dashboard.hidden = !on;
-    loginPanel.hidden = on;
-  }
-
-  function renderResponses(responses) {
-    list.replaceChildren();
-    if (!responses.length) {
-      const empty = document.createElement('p');
-      empty.className = 'responses__empty';
-      empty.textContent = 'No responses yet.';
-      list.appendChild(empty);
-      return;
-    }
-    responses.forEach((r) => {
-      const card = document.createElement('article');
-      card.className = 'response-card glass';
-
-      const rows = [['Name', r.name], ['Email', r.email], ['Message', r.message], ['Time', formatTimestamp(r.timestamp)]];
-      rows.forEach(([label, value]) => {
-        const p = document.createElement('p');
-        const strong = document.createElement('strong');
-        strong.textContent = label + ': ';
-        p.append(strong, String(value ?? ''));   // text nodes only, so no HTML injection
-        card.appendChild(p);
-      });
-
-      const del = document.createElement('button');
-      del.type = 'button';
-      del.className = 'btn btn--ghost response-card__delete';
-      del.textContent = 'Delete';
-      del.addEventListener('click', async () => {
-        del.disabled = true;
-        try {
-          await deleteResponse(r.id);
-          await refresh();
-        } catch (err) {
-          console.error(err);
-          del.disabled = false;
-          setStatus(statusEl, 'Could not delete that response. Please try again.', 'error');
-        }
-      });
-      card.appendChild(del);
-      list.appendChild(card);
-    });
-  }
-
-  async function refresh() {
-    setStatus(statusEl, 'Loading responses…', '');
-    try {
-      const responses = await loadResponses();
-      renderResponses(responses);
-      setStatus(statusEl, responses.length ? `${responses.length} response${responses.length === 1 ? '' : 's'}` : '', '');
-    } catch (err) {
-      console.error('[admin] load failed:', err);
-      list.replaceChildren();
-      setStatus(statusEl, 'Could not load responses: ' + err.message, 'error');
-    }
-  }
-
-  loginForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const data = new FormData(loginForm);
-    const ok = data.get('username') === ADMIN_CONFIG.username && data.get('password') === ADMIN_CONFIG.password;
-    if (!ok) { setStatus(loginError, 'Incorrect username or password.', 'error'); return; }
-    setStatus(loginError, '', '');
-    loginForm.reset();
-    writeSession(true);
-    showDashboard(true);
-    refresh();
-  });
-
-  $('#admin-logout').addEventListener('click', () => {
-    writeSession(false);
-    list.replaceChildren();
-    showDashboard(false);
-  });
-
-  $('#admin-refresh').addEventListener('click', refresh);
-
-  $('#admin-delete-all').addEventListener('click', async () => {
-    if (!window.confirm('Delete ALL responses? This cannot be undone.')) return;
-    try {
-      await deleteAllResponses();
-      await refresh();
-    } catch (err) {
-      console.error(err);
-      setStatus(statusEl, 'Could not delete responses. Please try again.', 'error');
-    }
-  });
-
-  // restore an existing login within this browser tab
-  if (readSession()) { showDashboard(true); refresh(); } else { showDashboard(false); }
-}
-
 function initContact() {
   const form = $('#contact-form');
   if (form) {
@@ -1388,7 +1234,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initOrbitPause, initTilt, initMagnetic, initParallax, initRipple,
     initNeuralCanvas, initBootRain, initRoleTypewriter, initTerminal,
     initHackathonAccordion,
-    initGithubStats, initCertificates, initContact, initAdmin, initCommandPalette, initAIWidget,
+    initGithubStats, initCertificates, initContact, initCommandPalette, initAIWidget,
     initTheme, initMusicToggle, initDevMode, initProjectFilter, initProjectModal
   ];
   modules.forEach((fn) => {
