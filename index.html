@@ -56,6 +56,19 @@
 }
 </script>
 
+<!-- Auth gate: decide login vs portfolio before first paint (client-side demo auth) -->
+<script>
+(function () {
+  var authed = false;
+  try {
+    var s = JSON.parse(localStorage.getItem('portfolioAuth') || 'null');
+    authed = !!(s && typeof s.user === 'string' && s.user);
+  } catch (e) { authed = false; }
+  window.__portfolioAuthed = authed;
+  document.documentElement.setAttribute('data-auth', authed ? 'in' : 'out');
+})();
+</script>
+
 <noscript>
   <style>
     #boot-screen{ display:none !important; }
@@ -66,6 +79,70 @@
 </head>
 <body>
 
+<!-- Auth: login / signup. Shown until a successful login; the portfolio itself lives in the template below. -->
+<div id="auth-container" class="auth">
+  <div class="auth__card" role="main">
+
+    <!-- Login -->
+    <section id="login-view" aria-labelledby="login-heading">
+      <h1 id="login-heading" class="auth__title">Welcome Back</h1>
+      <p class="auth__subtitle">Login to your account</p>
+      <p id="login-notice" class="auth__notice" role="status" aria-live="polite" hidden></p>
+      <form id="login-form" class="auth__form" novalidate>
+        <label class="auth__field">
+          <span class="auth__icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg></span>
+          <input type="text" name="username" placeholder="Username" autocomplete="username" aria-label="Username" required />
+        </label>
+        <label class="auth__field">
+          <span class="auth__icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15.5" r="1" fill="currentColor"/></svg></span>
+          <input type="password" name="password" placeholder="Password" autocomplete="current-password" aria-label="Password" required />
+        </label>
+        <p id="login-error" class="auth__error" role="alert"></p>
+        <button type="submit" class="auth__submit">Login</button>
+      </form>
+      <div class="auth__divider"><span>or continue with</span></div>
+      <div class="auth__social">
+        <button type="button" class="auth__social-btn" data-provider="Apple"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M16.4 12.6c0-2.4 2-3.5 2.1-3.6-1.1-1.700-2.900-1.900-3.500-1.900-1.500-.15-2.900.9-3.700.9s-1.900-.85-3.200-.8c-1.600 0-3.100.95-4 2.400-1.700 3-.44 7.400 1.200 9.800.8 1.200 1.800 2.500 3 2.400 1.200 0 1.700-.8 3.100-.8s1.900.8 3.200.8 2.100-1.200 2.900-2.300c.9-1.300 1.300-2.600 1.300-2.700 0 0-2.500-1-2.400-3.600zM14 5.500c.7-.8 1.100-1.900 1-3-1 0-2.100.7-2.800 1.500-.6.7-1.200 1.800-1 2.900 1.100.1 2.100-.6 2.800-1.400z"/></svg><span>Apple</span></button>
+        <button type="button" class="auth__social-btn" data-provider="Google"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="#4285F4" d="M23 12.3c0-.8-.1-1.500-.2-2.200H12v4.200h6.200c-.3 1.400-1.100 2.600-2.300 3.400v2.800h3.700c2.200-2 3.400-5 3.400-8.200z"/><path fill="#34A853" d="M12 23.500c3.100 0 5.700-1 7.600-2.800l-3.700-2.800c-1 .7-2.300 1.100-3.900 1.100-3 0-5.500-2-6.400-4.700H1.800v2.900C3.700 20.900 7.500 23.500 12 23.500z"/><path fill="#FBBC05" d="M5.600 14.300c-.2-.7-.4-1.500-.4-2.300s.1-1.600.4-2.300V6.800H1.800C1 8.400.5 10.100.5 12s.5 3.600 1.300 5.200l3.800-2.900z"/><path fill="#EA4335" d="M12 5c1.700 0 3.200.6 4.400 1.700l3.300-3.300C17.700 1.600 15.100.5 12 .5 7.500.5 3.700 3.100 1.800 6.800l3.800 2.900C6.500 7 9 5 12 5z"/></svg><span>Google</span></button>
+      </div>
+      <p class="auth__switch">Don't have an account? <a href="#" id="show-signup">Sign up</a></p>
+    </section>
+
+    <!-- Signup -->
+    <section id="signup-view" aria-labelledby="signup-heading" hidden>
+      <h1 id="signup-heading" class="auth__title">Create an account</h1>
+      <p class="auth__subtitle">Sing up and get 30 day free trial</p>
+      <form id="signup-form" class="auth__form" novalidate>
+        <label class="auth__field">
+          <span class="auth__icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg></span>
+          <input type="text" name="name" placeholder="Full name" autocomplete="name" aria-label="Full name" required />
+        </label>
+        <label class="auth__field">
+          <span class="auth__icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m3.5 7 8.5 6.5L20.5 7"/></svg></span>
+          <input type="email" name="email" placeholder="Email" autocomplete="email" aria-label="Email" required />
+        </label>
+        <label class="auth__field">
+          <span class="auth__icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15.5" r="1" fill="currentColor"/></svg></span>
+          <input type="password" name="password" placeholder="Password" autocomplete="new-password" aria-label="Password" required />
+          <button type="button" class="auth__eye" id="toggle-password" aria-label="Show password" aria-pressed="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </label>
+        <p id="signup-error" class="auth__error" role="alert"></p>
+        <button type="submit" class="auth__submit">Submit</button>
+      </form>
+      <div class="auth__divider"><span>or continue with</span></div>
+      <div class="auth__social">
+        <button type="button" class="auth__social-btn" data-provider="Apple"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M16.4 12.6c0-2.4 2-3.5 2.1-3.6-1.1-1.700-2.900-1.900-3.500-1.900-1.500-.15-2.900.9-3.700.9s-1.900-.85-3.200-.8c-1.600 0-3.100.95-4 2.400-1.700 3-.44 7.400 1.200 9.800.8 1.200 1.800 2.500 3 2.400 1.200 0 1.700-.8 3.100-.8s1.900.8 3.200.8 2.100-1.200 2.900-2.300c.9-1.300 1.300-2.600 1.300-2.700 0 0-2.500-1-2.400-3.600zM14 5.500c.7-.8 1.100-1.900 1-3-1 0-2.100.7-2.800 1.500-.6.7-1.200 1.800-1 2.900 1.100.1 2.100-.6 2.800-1.400z"/></svg><span>Apple</span></button>
+        <button type="button" class="auth__social-btn" data-provider="Google"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="#4285F4" d="M23 12.3c0-.8-.1-1.500-.2-2.200H12v4.200h6.200c-.3 1.400-1.100 2.600-2.300 3.400v2.800h3.700c2.200-2 3.400-5 3.400-8.200z"/><path fill="#34A853" d="M12 23.500c3.100 0 5.700-1 7.600-2.800l-3.700-2.800c-1 .7-2.300 1.100-3.900 1.100-3 0-5.500-2-6.400-4.700H1.800v2.900C3.700 20.900 7.500 23.500 12 23.500z"/><path fill="#FBBC05" d="M5.600 14.300c-.2-.7-.4-1.500-.4-2.300s.1-1.600.4-2.300V6.800H1.800C1 8.400.5 10.100.5 12s.5 3.600 1.300 5.200l3.800-2.900z"/><path fill="#EA4335" d="M12 5c1.700 0 3.200.6 4.400 1.700l3.300-3.300C17.700 1.600 15.100.5 12 .5 7.500.5 3.700 3.100 1.800 6.800l3.800 2.900C6.500 7 9 5 12 5z"/></svg><span>Google</span></button>
+      </div>
+      <p class="auth__switch">Already have an account? <a href="#" id="show-login">Sign in</a></p>
+    </section>
+
+  </div>
+  <noscript><p class="auth__noscript">JavaScript is required to log in.</p></noscript>
+</div>
+
+<!-- Portfolio: inert template, only inserted into the page after a successful login (see script.js / inline loader) -->
+<template id="portfolio-template">
 <!-- Skip Link (Wcag 2.4.1) -->
 <a class="skip-link" href="#hero">Skip to content</a>
 
@@ -143,6 +220,9 @@
         <svg class="icon-moon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
         <svg class="icon-sun" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" hidden><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
       </button>
+      <button id="logout-btn" class="nav__icon-btn" type="button" data-logout aria-label="Log out" title="Log out">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </button>
       <button id="mobile-nav-toggle" class="nav__icon-btn nav__icon-btn--mobile-only" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-nav">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
       </button>
@@ -167,6 +247,7 @@
     <a href="#certifications" class="nav__link">Certifications</a>
     <a href="#github-stats" class="nav__link">GitHub</a>
     <a href="#contact" class="nav__link">Contact</a>
+    <a href="#" class="nav__link" data-logout>Logout</a>
 </nav>
 </header>
 
@@ -690,6 +771,15 @@
 <button id="back-to-top" type="button" aria-label="Back to top" hidden>
   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
 </button>
+
+</template>
+<script>
+  // insert the portfolio synchronously (before script.js runs) only for an authenticated visitor
+  if (window.__portfolioAuthed) {
+    var t = document.getElementById('portfolio-template');
+    t.parentNode.insertBefore(t.content, t);
+  }
+</script>
 
 <script src="script.js" defer></script>
 </body>

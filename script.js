@@ -1221,8 +1221,183 @@ function initProjectModal() {
   window.addEventListener('mouseup', () => { dragging = false; titlebar.style.cursor = ''; });
 }
 
+
+// =====================================================================
+// AUTH (login / signup / logout)
+// Client-side demo only: everything is stored in this browser and the demo
+// credentials are readable in this file. It keeps casual visitors out of the
+// portfolio; it is NOT production-grade authentication.
+//   - Demo login:  ADMIN_CONFIG.username / ADMIN_CONFIG.password (see top of file)
+//   - Signups:     localStorage 'portfolioUsers' (salted SHA-256 password hash)
+//   - Session:     localStorage 'portfolioAuth' = { user, ts }
+// index.html reads the session in <head> so the right page shows before first paint.
+// =====================================================================
+const AUTH_KEY = 'portfolioAuth';
+const USERS_KEY = 'portfolioUsers';
+
+function checkAuth() {
+  try {
+    const s = JSON.parse(window.localStorage.getItem(AUTH_KEY) || 'null');
+    return !!(s && typeof s.user === 'string' && s.user);
+  } catch (e) { return false; }
+}
+
+function readUsers() {
+  try {
+    const list = JSON.parse(window.localStorage.getItem(USERS_KEY) || '[]');
+    return Array.isArray(list) ? list : [];
+  } catch (e) { return []; }
+}
+
+function randomSalt() {
+  const bytes = new Uint8Array(16);
+  (window.crypto || window.msCrypto).getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// SHA-256 when available (https / localhost); tiny non-crypto fallback otherwise
+async function hashPassword(password, salt) {
+  const input = salt + ':' + password;
+  if (window.crypto && window.crypto.subtle) {
+    const buf = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+    return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
+  }
+  let h = 2166136261;
+  for (let i = 0; i < input.length; i++) { h ^= input.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return 'fnv' + (h >>> 0).toString(16);
+}
+
+function startSession(user) {
+  window.localStorage.setItem(AUTH_KEY, JSON.stringify({ user, ts: Date.now() }));
+}
+
+function logout() {
+  try { window.localStorage.removeItem(AUTH_KEY); } catch (e) { /* ignore */ }
+  // drop the hash + reload so the portfolio (and all its listeners) is torn down
+  window.location.replace(window.location.pathname + window.location.search);
+}
+
+function initAuth() {
+  // logout buttons live inside the portfolio, so delegate
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-logout]');
+    if (!btn) return;
+    e.preventDefault();
+    logout();
+  });
+  // logged out in another tab -> leave the portfolio here too
+  window.addEventListener('storage', (e) => {
+    if (e.key === AUTH_KEY && !checkAuth() && window.__portfolioAuthed) window.location.reload();
+  });
+
+  const loginView = $('#login-view');
+  const signupView = $('#signup-view');
+  if (!loginView || !signupView) return;
+
+  const loginForm = $('#login-form');
+  const signupForm = $('#signup-form');
+  const loginError = $('#login-error');
+  const signupError = $('#signup-error');
+  const notice = $('#login-notice');
+
+  function showLogin(msg) {
+    signupView.hidden = true;
+    loginView.hidden = false;
+    loginError.textContent = '';
+    notice.hidden = !msg;
+    notice.textContent = msg || '';
+    $('input[name="username"]', loginForm).focus();
+  }
+  function showSignup() {
+    loginView.hidden = true;
+    signupView.hidden = false;
+    signupError.textContent = '';
+    notice.hidden = true;
+    $('input[name="name"]', signupForm).focus();
+  }
+
+  $('#show-signup').addEventListener('click', (e) => { e.preventDefault(); showSignup(); });
+  $('#show-login').addEventListener('click', (e) => { e.preventDefault(); showLogin(); });
+
+  // show/hide password on the signup form
+  const pwInput = $('input[name="password"]', signupForm);
+  const eye = $('#toggle-password');
+  eye.addEventListener('click', () => {
+    const show = pwInput.type === 'password';
+    pwInput.type = show ? 'text' : 'password';
+    eye.setAttribute('aria-pressed', String(show));
+    eye.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+  });
+
+  // no OAuth backend behind these, so be upfront about it
+  $$('.auth__social-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const target = loginView.hidden ? signupError : loginError;
+      target.textContent = btn.dataset.provider + ' sign-in isn’t available in this demo. Please use username and password.';
+    });
+  });
+
+  loginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const data = new FormData(loginForm);
+    const username = String(data.get('username') || '').trim();
+    const password = String(data.get('password') || '');
+    if (!username || !password) { loginError.textContent = 'Enter your username and password.'; return; }
+
+    let user = null;
+    if (username === ADMIN_CONFIG.username && password === ADMIN_CONFIG.password) {
+      user = ADMIN_CONFIG.username;
+    } else {
+      const key = username.toLowerCase();
+      const match = readUsers().find((u) => u.email === key || u.name.toLowerCase() === key);
+      if (match && await hashPassword(password, match.salt) === match.hash) user = match.name;
+    }
+    if (!user) { loginError.textContent = 'Incorrect username or password.'; return; }
+
+    try {
+      startSession(user);
+    } catch (err) {
+      loginError.textContent = 'Your browser is blocking storage, so login can’t be saved.';
+      return;
+    }
+    window.location.reload();
+  });
+
+  signupForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const data = new FormData(signupForm);
+    const name = String(data.get('name') || '').trim();
+    const email = String(data.get('email') || '').trim().toLowerCase();
+    const password = String(data.get('password') || '');
+
+    if (name.length < 2) { signupError.textContent = 'Please enter your full name.'; return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { signupError.textContent = 'Please enter a valid email address.'; return; }
+    if (password.length < 8) { signupError.textContent = 'Password must be at least 8 characters.'; return; }
+
+    const users = readUsers();
+    if (users.some((u) => u.email === email)) { signupError.textContent = 'An account with this email already exists.'; return; }
+
+    try {
+      const salt = randomSalt();
+      users.push({ name, email, salt, hash: await hashPassword(password, salt) });
+      window.localStorage.setItem(USERS_KEY, JSON.stringify(users));
+    } catch (err) {
+      signupError.textContent = 'Could not save your account (browser storage is blocked).';
+      return;
+    }
+    signupForm.reset();
+    showLogin('Account created! Log in with your email and password.');
+    $('input[name="username"]', loginForm).value = email;
+    $('input[name="password"]', loginForm).focus();
+  });
+}
+
 // ---- boot it up ----
 document.addEventListener('DOMContentLoaded', () => {
+  initAuth();
+  // logged out: only the login/signup UI runs, the portfolio isn't even in the DOM
+  if (!checkAuth()) return;
+
   document.body.style.overflow = 'hidden';
   const yearEl = $('#footer-year');
   if (yearEl) yearEl.textContent = String(new Date().getFullYear());
