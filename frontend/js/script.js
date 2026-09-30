@@ -36,7 +36,7 @@ const ADMIN_CONFIG = {
 //    Also add your site's domain (vansh-yadav-286.github.io) under
 //    Authentication -> Settings -> Authorized domains. See README for the full setup.
 const firebaseConfig = {
-  apiKey: "AIzaSyCmcyiajpKNJBwxRVksrjdUfwMMzN050N8",
+  apiKey: "AIzaSyCnq_mCyT5rMWzOrq3kBx36-0lXEn1t7vg",
   authDomain: "portfolio-cddf2.firebaseapp.com",
   projectId: "portfolio-cddf2",
   storageBucket: "portfolio-cddf2.firebasestorage.app",
