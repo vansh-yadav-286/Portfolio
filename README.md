@@ -257,90 +257,186 @@ jobs:
 
 ---
 
-## Project: Portfolio with Contact Form, Admin Dashboard and Google Sheets Database
+## Project: Full-Stack Portfolio (FastAPI + PostgreSQL + Admin Dashboard)
 
-### Features
-- Single-page portfolio (semantic `<section>` containers, navbar linking to every section, dark/light theme toggle)
-- Contact form (name, email, message) with validation, loading state, success and error messages
-- Responses stored in **Google Sheets** via Google Apps Script (or in browser `localStorage` for development)
-- Admin login (show/hide with JavaScript + CSS). After login the login form is replaced by a **User Responses** dashboard with timestamps, per-response delete, Delete All (with confirmation), Refresh and Logout
-- Two separate React mini-projects: `react-contact-cards/` and `react-like-card/`
+### 1. Overview
 
-### Technologies
-HTML, CSS, vanilla JavaScript, Google Apps Script, Google Sheets, React 18 + Vite, GitHub Pages.
+The portfolio is a three-part application: a static frontend, a FastAPI REST backend, and a PostgreSQL database, each in its own top-level folder with a single responsibility. Projects, certificates and contact messages are managed data (via an admin dashboard) instead of being hardcoded in the page.
 
-### Where the settings live
-Everything you need to edit is at the top of [script.js](script.js):
+### 2. Architecture
 
-```js
-const GOOGLE_SCRIPT_URL = "PASTE_YOUR_DEPLOYED_APPS_SCRIPT_URL_HERE";
-const USE_LOCAL_STORAGE = false;   // true = localStorage (dev), false = Google Sheets
-const ADMIN_CONFIG = { username: 'admin', password: 'change-me-123' };
+```
+GitHub Pages                       Render
+┌────────────────┐   REST/JSON   ┌──────────────────────────────┐
+│   frontend/     │ ────────────▶ │  backend/  (FastAPI)          │
+│  HTML/CSS/JS    │ ◀──────────── │  routes → schemas → services  │
+└────────────────┘                │           → models (SQLAlchemy)│
+                                   └───────────────┬───────────────┘
+                                                    │
+                                                    ▼
+                                          PostgreSQL (managed on Render)
+                                          schema + migrations in database/
 ```
 
-### localStorage mode
-Set `USE_LOCAL_STORAGE = true`. All responses are stored as one JSON array under the key `portfolioResponses`:
+### 3. Frontend (`frontend/`)
 
-```json
-[{ "id": "uuid", "name": "Rahul", "email": "rahul@example.com", "message": "Hello", "timestamp": "2026-09-28T09:00:00.000Z" }]
+Plain HTML/CSS/JavaScript, no build step, deployed on **GitHub Pages**.
+
 ```
-With `false`, localStorage is never used as a silent fallback: if Google Sheets fails, the error is shown.
-
-### Google Sheets architecture
+frontend/
+├── index.html
+├── css/style.css
+├── js/
+│   ├── config.js      # API_BASE_URL — the one place the backend URL is configured
+│   └── script.js       # all page behavior, including fetch() calls to the API
+├── assets/             # images, logos, icons
+├── certificates/        # certificate PDFs
+├── resume/               # resume PDF
+├── Workshop & Hackathon/  # workshop/hackathon certificate PDFs
+└── admin/               # admin dashboard (separate mini-app)
+    ├── index.html
+    ├── admin.css
+    └── admin.js
 ```
-Contact form -> fetch() POST -> Apps Script Web App -> Google Sheet   (ID | Name | Email | Message | Timestamp)
-Admin dashboard -> fetch() GET -> Apps Script Web App -> Google Sheet -> JSON -> dashboard
+
+Projects and certificates are no longer hardcoded: `js/script.js` fetches them from `GET /api/projects` and `GET /api/certificates` and renders the same card markup the site always used. The contact form posts to `POST /api/contact`. A lightweight, PII-free page-visit ping goes to `POST /api/analytics/visit`.
+
+### 4. Backend (`backend/`)
+
+Python + FastAPI, deployed on **Render**. See [`backend/README.md`](backend/README.md) for the full architecture, local dev, testing and deployment steps.
+
 ```
-Backend code: [google-apps-script/Code.gs](google-apps-script/Code.gs) (`doPost(e)` adds/deletes, `doGet(e)` lists).
+backend/app/
+├── main.py             # app wiring: CORS, exception handlers, routers, lifespan
+├── core/                # config, JWT/password security, auth dependencies, rate limiting
+├── routes/              # auth, projects, certificates, contact, analytics
+├── services/            # business logic
+├── schemas/             # Pydantic request/response models
+├── models/              # SQLAlchemy ORM models
+├── database/            # engine/session + declarative Base
+└── utils/               # shared helpers (response envelope)
+backend/tests/           # pytest, one file per resource — 20 tests, all passing
+```
 
-### Apps Script setup
-1. Create a new Google Sheet (any name).
-2. Menu **Extensions -> Apps Script**.
-3. Replace the contents of `Code.gs` with [google-apps-script/Code.gs](google-apps-script/Code.gs).
-4. Change `ADMIN_KEY` in it to the same value as `ADMIN_CONFIG.password` in `script.js`.
-5. Click **Deploy -> New deployment -> type: Web app**. Execute as: **Me**. Who has access: **Anyone**. Click **Deploy** and authorize when asked.
-6. Copy the **Web app URL** (ends in `/exec`).
-7. Paste it into `GOOGLE_SCRIPT_URL` in `script.js`.
-8. After any later change to `Code.gs`: **Deploy -> Manage deployments -> edit -> New version -> Deploy** (the URL stays the same).
+### 5. Database (`database/`)
 
-The `Responses` tab and header row are created automatically on the first request.
+PostgreSQL, versioned with Alembic. SQLAlchemy models live in `backend/app/models/` (the application layer); this folder holds the database's own artifacts only. See [`database/docs/database.md`](database/docs/database.md).
 
-### Run the portfolio locally
-No build step. Either open `index.html`, or run a local server (recommended):
+```
+database/
+├── migrations/alembic/   # Alembic env + versioned migrations
+├── schemas/schema.sql     # reference DDL (documentation)
+├── seeds/seed.sql          # initial projects + certificates data
+└── docs/database.md
+```
+
+### 6. Setup
+
 ```bash
-python3 -m http.server 8000     # then open http://localhost:8000
+# 1. Database
+createdb portfolio_db   # or use a managed Postgres instance
+
+# 2. Backend
+cd backend
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env    # fill in DATABASE_URL, SECRET_KEY, ADMIN_EMAIL, ADMIN_PASSWORD, ...
+
+cd ../database
+alembic upgrade head
+psql "$DATABASE_URL" -f seeds/seed.sql   # optional sample data
+
+cd ../backend
+uvicorn app.main:app --reload           # http://localhost:8000, docs at /docs
+
+# 3. Frontend
+cd ../frontend
+python3 -m http.server 5500             # http://localhost:5500
 ```
 
-### Run the React projects
+### 7. Environment variables
+
+`backend/.env.example`:
+```
+DATABASE_URL=postgresql+psycopg://username:password@localhost:5432/portfolio_db
+SECRET_KEY=change_this_secret
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=60
+FRONTEND_URL=http://localhost:5500
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=change_this_password
+```
+Never commit a real `.env`. The admin account is created automatically on backend startup from `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
+
+### 8. Authentication
+
+FastAPI + OAuth2PasswordBearer + JWT (HS256) + bcrypt password hashing. `POST /api/auth/register` creates a regular (`user`-role) account; the seeded admin account is the only `admin`-role user. Admin-only routes (managing projects/certificates/contact messages/analytics) are protected by a role dependency. `/api/auth/login` is rate-limited against brute-force attempts. See [`backend/README.md`](backend/README.md) for the full route table.
+
+### 9. Admin dashboard
+
+`frontend/admin/` — Overview (stats), Projects (CRUD, mark featured), Certificates (CRUD), Contact Messages (view, change status, delete), Analytics (visitor counts, top pages), Logout. Logs in against `POST /api/auth/login` with the seeded admin credentials; the JWT is stored in the browser and sent as `Authorization: Bearer <token>` on every admin request.
+
+### 10. Testing
+
+```bash
+cd backend
+pytest
+```
+20 tests covering registration, login (valid/invalid), protected-route access, project CRUD, certificate CRUD, contact form submission/validation, and admin-only authorization checks. Tests run against a throwaway SQLite database, independent of your dev Postgres instance.
+
+### 11. Deployment
+
+**Frontend → GitHub Pages.** GitHub Pages' legacy "deploy from a branch" mode can only serve `/` or `/docs`, and the site now lives in `frontend/`. A workflow at [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml) deploys `frontend/` on every push to `main`. One-time setup: repo **Settings → Pages → Source: GitHub Actions** (not "Deploy from a branch"). After that, pushes to `main` that touch `frontend/**` deploy automatically.
+
+**Backend → Render only** (do not use Railway). `render.yaml` at the repo root is a ready-to-use Blueprint:
+```
+buildCommand: pip install -r backend/requirements.txt && cd database && alembic upgrade head
+startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+```
+Set `SECRET_KEY`, `FRONTEND_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` in the Render dashboard; `DATABASE_URL` is injected automatically from the attached managed Postgres instance. Full steps in [`backend/README.md`](backend/README.md).
+
+After deploying, update `API_BASE_URL` in `frontend/js/config.js` to the Render URL.
+
+### 12. Security
+
+Bcrypt password hashing; JWT auth with role-based admin authorization; CORS restricted to `FRONTEND_URL` only (never `*`); centralized exception handling so stack traces/DB errors are never returned to the client; rate limiting on login; Pydantic validation on every request body; no secrets or `.env` files committed.
+
+### 13. Firebase (Google / Apple sign-in) — unchanged, separate from the admin system
+
+The portfolio's own visitor login gate (separate from the admin dashboard above) still uses Firebase for Google/Apple sign-in, plus a client-side demo login for username/password, exactly as before — see the section below. This was kept as-is rather than migrated: it gates casual visitors from the page itself and isn't the "admin manages content" auth the rest of this document describes, which now lives entirely in the FastAPI backend.
+
+### 14. Cleanup performed during this restructure
+
+**Moved**: `index.html`, `style.css` → `css/`, `script.js` → `js/`, `Logo/` → `frontend/assets/logos/`, `Certification/` → `frontend/certificates/`, `resume/`, `Workshop & Hackathon/`, `assets/images/` all into `frontend/`.
+
+**Removed**: `google-apps-script/Code.gs` and its Apps Script contact-form backend — fully superseded by `POST /api/contact` (verified no other file referenced it before removing). The hardcoded `certificates` array and 5 static project `<article>` cards in `index.html`/`script.js` were removed in favor of fetching from the API (seeded with the same data in `database/seeds/seed.sql`).
+
+**Created**: `.github/workflows/deploy-pages.yml` — GitHub Pages' branch-deploy mode can't serve a subfolder like `frontend/`, so this workflow deploys it via GitHub Actions instead (see §11).
+
+**Kept as-is**: `react-contact-cards/` and `react-like-card/` (standalone Vite/React practice projects, not part of the portfolio page — no references to them exist in `index.html`, `script.js` or `style.css`; they're documented separately below). The visitor login gate's Firebase/localStorage implementation (see §13).
+
+### Known limitations
+- The portfolio's own visitor login gate is a client-side demo, unrelated to the real backend auth used for the admin dashboard (see §13).
+- Anyone can submit the contact form; no spam protection beyond basic validation.
+- The mobile navbar buttons overflow the screen by ~18px at 390px width — pre-existing, unrelated to this restructure.
+
+### Run the React mini-projects
 ```bash
 cd react-contact-cards      # or: cd react-like-card
 npm install
 npm run dev                 # open the URL Vite prints
 ```
-
-### Deploy to GitHub Pages
-1. Create a GitHub repository and push this folder to the `main` branch.
-2. Repo **Settings -> Pages**. Source: **Deploy from a branch**, branch `main`, folder `/ (root)`. Save.
-3. After a minute the site is live at `https://<your-username>.github.io/<repo-name>/` (or `https://<your-username>.github.io/` if the repo is named `<your-username>.github.io`).
-4. The `canonical` and `og:` URLs in `index.html` point at `https://vansh-yadav-286.github.io/`; update them if your final URL differs.
-
-The React apps are separate projects and are not part of the Pages site unless you run `npm run build` and publish the `dist/` output yourself.
-
-### Known limitations
-- **Admin login is a client-side demo.** The username/password are readable in `script.js`. The Apps Script also requires the password as a key for reading/deleting, but that same key is visible in the page source, so treat this as a convenience lock, not real security. Do not use a password you use anywhere else.
-- Anyone can submit the contact form (spam protection is not included).
-- Google Sheets mode needs the Apps Script deployed as "Anyone"; a redeploy without "New version" will not pick up code changes.
-- The mobile navbar buttons overflow the screen by ~18px at 390px width. This was already the case in the original code and was left unchanged.
+These are standalone practice projects and are not part of the portfolio page or its deployment.
 
 ---
 
-## Google / Apple sign-in (Firebase)
+## Google / Apple sign-in (Firebase) — portfolio visitor gate
 
-The login page's Google and Apple buttons use Firebase Authentication (`signInWithPopup`). Username/password login and signup still work as before; Google/Apple is an additional method. Sessions are stored in `localStorage` as `portfolioAuth` (`{ user, provider, ts }`). This is a frontend demo, not production-grade auth.
+The login page's Google and Apple buttons use Firebase Authentication (`signInWithPopup`). Username/password login and signup still work as before; Google/Apple is an additional method. Sessions are stored in `localStorage` as `portfolioAuth` (`{ user, provider, ts }`). This is a frontend demo gate for casual visitors — it is separate from, and does not affect, the real JWT-backed admin authentication described above.
 
 **Setup**
 1. Create a project at https://console.firebase.google.com, then **Project settings -> Your apps -> Add app -> Web**.
-2. Copy the `firebaseConfig` values into the `firebaseConfig` block near the top of `script.js` (client config is not secret; never add a service-account key).
+2. Copy the `firebaseConfig` values into the `firebaseConfig` block near the top of `frontend/js/script.js` (client config is not secret; never add a service-account key).
 3. **Authentication -> Sign-in method**: enable **Google**, and **Apple** if you want it.
 4. **Authentication -> Settings -> Authorized domains**: add `vansh-yadav-286.github.io` (`localhost` is there by default).
 

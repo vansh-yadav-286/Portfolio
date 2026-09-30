@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Admin Dashboard — Vansh Yadav Portfolio</title>
+<meta name="robots" content="noindex, nofollow" />
+<link rel="stylesheet" href="admin.css" />
+</head>
+<body>
+
+<!-- Login -->
+<section id="admin-login-view" class="admin-auth">
+  <form id="admin-login-form" class="admin-auth__card" novalidate>
+    <h1>Admin Login</h1>
+    <p class="admin-auth__subtitle">Sign in with your admin account to manage the portfolio.</p>
+    <label class="admin-field">
+      <span>Email</span>
+      <input type="email" name="email" autocomplete="username" required />
+    </label>
+    <label class="admin-field">
+      <span>Password</span>
+      <input type="password" name="password" autocomplete="current-password" required />
+    </label>
+    <p id="admin-login-error" class="admin-error" role="alert"></p>
+    <button type="submit" class="admin-btn admin-btn--primary">Login</button>
+  </form>
+</section>
+
+<!-- Dashboard -->
+<div id="admin-app" class="admin-app" hidden>
+  <aside class="admin-sidebar">
+    <h1 class="admin-sidebar__title">Portfolio Admin</h1>
+    <nav class="admin-nav">
+      <button type="button" class="admin-nav__link is-active" data-view="overview">Overview</button>
+      <button type="button" class="admin-nav__link" data-view="projects">Projects</button>
+      <button type="button" class="admin-nav__link" data-view="certificates">Certificates</button>
+      <button type="button" class="admin-nav__link" data-view="messages">Contact Messages</button>
+      <button type="button" class="admin-nav__link" data-view="analytics">Analytics</button>
+    </nav>
+    <button type="button" id="admin-logout" class="admin-btn admin-btn--ghost">Logout</button>
+  </aside>
+
+  <main class="admin-main">
+    <!-- Overview -->
+    <section data-view-panel="overview" class="admin-view">
+      <h2>Overview</h2>
+      <div class="admin-stats" id="overview-stats"></div>
+    </section>
+
+    <!-- Projects -->
+    <section data-view-panel="projects" class="admin-view" hidden>
+      <div class="admin-view__header">
+        <h2>Projects</h2>
+        <button type="button" class="admin-btn admin-btn--primary" id="project-new-btn">+ New Project</button>
+      </div>
+      <div class="admin-table-wrap"><table class="admin-table" id="projects-table">
+        <thead><tr><th>Title</th><th>Category</th><th>Technologies</th><th>Featured</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </section>
+
+    <!-- Certificates -->
+    <section data-view-panel="certificates" class="admin-view" hidden>
+      <div class="admin-view__header">
+        <h2>Certificates</h2>
+        <button type="button" class="admin-btn admin-btn--primary" id="certificate-new-btn">+ New Certificate</button>
+      </div>
+      <div class="admin-table-wrap"><table class="admin-table" id="certificates-table">
+        <thead><tr><th>Title</th><th>Issuer</th><th>Credential ID</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </section>
+
+    <!-- Contact Messages -->
+    <section data-view-panel="messages" class="admin-view" hidden>
+      <h2>Contact Messages</h2>
+      <div class="admin-table-wrap"><table class="admin-table" id="messages-table">
+        <thead><tr><th>From</th><th>Subject</th><th>Message</th><th>Status</th><th>Received</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </section>
+
+    <!-- Analytics -->
+    <section data-view-panel="analytics" class="admin-view" hidden>
+      <h2>Analytics</h2>
+      <div class="admin-stats" id="analytics-stats"></div>
+      <h3>Top Pages</h3>
+      <div class="admin-table-wrap"><table class="admin-table" id="top-pages-table">
+        <thead><tr><th>Page</th><th>Visits</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </section>
+  </main>
+</div>
+
+<!-- Project / certificate edit dialog -->
+<div id="admin-modal-overlay" class="admin-modal-overlay" hidden>
+  <form id="admin-modal-form" class="admin-modal">
+    <h3 id="admin-modal-title">Edit</h3>
+    <div id="admin-modal-fields"></div>
+    <p id="admin-modal-error" class="admin-error" role="alert"></p>
+    <div class="admin-modal__actions">
+      <button type="button" class="admin-btn admin-btn--ghost" id="admin-modal-cancel">Cancel</button>
+      <button type="submit" class="admin-btn admin-btn--primary">Save</button>
+    </div>
+  </form>
+</div>
+
+<div id="admin-toast-container" class="admin-toast-container"></div>
+
+<script src="../js/config.js"></script>
+<script src="admin.js" defer></script>
+</body>
+</html>
