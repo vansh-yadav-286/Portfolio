@@ -20,10 +20,6 @@ contact_status = sa.Enum("unread", "read", "replied", "archived", name="contact_
 
 
 def upgrade() -> None:
-    bind = op.get_bind()
-    user_role.create(bind, checkfirst=True)
-    contact_status.create(bind, checkfirst=True)
-
     op.create_table(
         "users",
         sa.Column("id", sa.Integer(), primary_key=True),
