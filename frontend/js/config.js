@@ -7,4 +7,4 @@
 // Production:  the deployed Render URL. Update this one line after deploying.
 const API_BASE_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   ? 'http://localhost:8000'
-  : 'https://your-backend.onrender.com';
+  : 'https://portfolio-api-i74q.onrender.com';
