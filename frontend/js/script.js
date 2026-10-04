@@ -643,6 +643,8 @@ function initHackathonAccordion() {
 
   let open = false;
   setInert(panel, true);
+  // a closed panel is removed from layout entirely, so it doesn't leave a grid gap
+  panel.hidden = true;
 
   function setOpen(next) {
     open = next;
@@ -652,11 +654,15 @@ function initHackathonAccordion() {
     setInert(panel, !open);
 
     if (prefersReducedMotion) {
+      panel.hidden = !open;
       panel.style.maxHeight = open ? 'none' : '0px';
       return;
     }
 
     if (open) {
+      panel.hidden = false;
+      // force reflow so the panel has a 0px starting height to animate from
+      void panel.offsetHeight;
       panel.style.maxHeight = panel.scrollHeight + 'px';
     } else {
       // can't transition max-height from "none", so snap to the real
@@ -665,6 +671,11 @@ function initHackathonAccordion() {
       requestAnimationFrame(() => { panel.style.maxHeight = '0px'; });
     }
   }
+
+  // once the collapse animation finishes, take the panel out of layout
+  panel.addEventListener('transitionend', (e) => {
+    if (e.target === panel && e.propertyName === 'max-height' && !open) panel.hidden = true;
+  });
 
   toggle.addEventListener('click', () => setOpen(!open));
 
