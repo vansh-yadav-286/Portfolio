@@ -21,16 +21,7 @@ const CONFIG = {
 // AUTH / MISC SETTINGS
 // =====================================================================
 
-// 1. Demo admin login. NOTE: this is client-side only, so anyone who opens the
-//    page source can read it. It hides the portfolio from casual visitors; it is
-//    NOT real security. This is separate from the admin dashboard's login, which
-//    is backed by the real FastAPI + JWT auth (see admin/admin.js).
-const ADMIN_CONFIG = {
-  username: 'Shorya',
-  password: 'shorya@286'
-};
-
-// 2. Firebase (Google / Apple sign-in). Paste your own values from
+// 1. Firebase (Google / Apple sign-in). Paste your own values from
 //    Firebase console -> Project settings -> Your apps -> Web app -> SDK setup.
 //    These client-side values are NOT secrets. Never put a service-account key here.
 //    Also add your site's domain (vansh-yadav-286.github.io) under
@@ -1281,7 +1272,6 @@ function initProjectModal() {
 // Client-side demo only: everything is stored in this browser and the demo
 // credentials are readable in this file. It keeps casual visitors out of the
 // portfolio; it is NOT production-grade authentication.
-//   - Demo login:  ADMIN_CONFIG.username / ADMIN_CONFIG.password (see top of file)
 //   - Signups:     localStorage 'portfolioUsers' (salted SHA-256 password hash)
 //   - Session:     localStorage 'portfolioAuth' = { user, ts }
 // index.html reads the session in <head> so the right page shows before first paint.
@@ -1532,13 +1522,9 @@ function initAuth() {
     if (!username || !password) { loginError.textContent = 'Enter your username and password.'; return; }
 
     let user = null;
-    if (username === ADMIN_CONFIG.username && password === ADMIN_CONFIG.password) {
-      user = ADMIN_CONFIG.username;
-    } else {
-      const key = username.toLowerCase();
-      const match = readUsers().find((u) => u.email === key || u.name.toLowerCase() === key);
-      if (match && await hashPassword(password, match.salt) === match.hash) user = match.name;
-    }
+    const key = username.toLowerCase();
+    const match = readUsers().find((u) => u.email === key || u.name.toLowerCase() === key);
+    if (match && await hashPassword(password, match.salt) === match.hash) user = match.name;
     if (!user) { loginError.textContent = 'Incorrect username or password.'; return; }
 
     try {
