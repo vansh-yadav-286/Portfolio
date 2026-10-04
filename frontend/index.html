@@ -397,6 +397,7 @@
       <div class="project-grid reveal" id="project-grid">
         <!-- Populated at runtime by renderProjects() in js/script.js, fetched from GET /api/projects -->
 </div>
+      <p id="project-status" class="project-empty" role="status" hidden></p>
       <p id="project-empty-state" class="project-empty" hidden>No projects match that filter &mdash; try a different stack.</p>
 </div>
 </section>
@@ -471,23 +472,23 @@
 
         <div class="hackathon-accordion-panel" id="ecell-panel" role="region" aria-labelledby="ecell-toggle">
           <div class="hackathon-accordion-inner">
-            <a class="hackathon-card glass hackathon-card--sub" href="Workshop & Hackathon/E-Cell IIT Roorkee /BLUE DART WORKSHOP.pdf" target="_blank" rel="noopener noreferrer" aria-label="Open Blue Dart Workshop certificate PDF in a new tab">
+            <a class="hackathon-card glass hackathon-card--sub" href="Workshop & Hackathon/E-Cell IIT Roorkee/BLUE DART WORKSHOP.pdf" target="_blank" rel="noopener noreferrer" aria-label="Open Blue Dart Workshop certificate PDF in a new tab">
               <svg class="hackathon-card__icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="7" width="15" height="11" rx="1.5"/><path d="M16 10h3.3a1 1 0 0 1 .9.55L22 14v4h-6"/><circle cx="7.5" cy="18.5" r="1.6"/><circle cx="17.5" cy="18.5" r="1.6"/></svg>
               <h3>Blue Dart Workshop</h3>
 </a>
-            <a class="hackathon-card glass hackathon-card--sub" href="Workshop & Hackathon/E-Cell IIT Roorkee /HILABS WORKSHOP.pdf" target="_blank" rel="noopener noreferrer" aria-label="Open HiLabs Workshop certificate PDF in a new tab">
+            <a class="hackathon-card glass hackathon-card--sub" href="Workshop & Hackathon/E-Cell IIT Roorkee/HILABS WORKSHOP.pdf" target="_blank" rel="noopener noreferrer" aria-label="Open HiLabs Workshop certificate PDF in a new tab">
               <svg class="hackathon-card__icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 3v4M15 3v4M4 8h16M5 8v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8"/><path d="M9 13h6M9 17h4"/></svg>
               <h3>HiLabs Workshop</h3>
 </a>
-            <a class="hackathon-card glass hackathon-card--sub" href="Workshop & Hackathon/E-Cell IIT Roorkee /Tech Workshop by Microsoft Azure Cloud Specialist.pdf" target="_blank" rel="noopener noreferrer" aria-label="Open Tech Workshop by Microsoft Azure Cloud Specialist certificate PDF in a new tab">
+            <a class="hackathon-card glass hackathon-card--sub" href="Workshop & Hackathon/E-Cell IIT Roorkee/Tech Workshop by Microsoft Azure Cloud Specialist.pdf" target="_blank" rel="noopener noreferrer" aria-label="Open Tech Workshop by Microsoft Azure Cloud Specialist certificate PDF in a new tab">
               <svg class="hackathon-card__icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17.5 19H8a5 5 0 0 1-1-9.9 6 6 0 0 1 11.6 1.9A4 4 0 0 1 17.5 19z"/></svg>
               <h3>Tech Workshop by Microsoft Azure Cloud Specialist</h3>
 </a>
-            <a class="hackathon-card glass hackathon-card--sub" href="Workshop & Hackathon/E-Cell IIT Roorkee /BIZ QUIZ.pdf" target="_blank" rel="noopener noreferrer" aria-label="Open Biz Quiz certificate PDF in a new tab">
+            <a class="hackathon-card glass hackathon-card--sub" href="Workshop & Hackathon/E-Cell IIT Roorkee/BIZ QUIZ.pdf" target="_blank" rel="noopener noreferrer" aria-label="Open Biz Quiz certificate PDF in a new tab">
               <svg class="hackathon-card__icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17.5 19H8a5 5 0 0 1-1-9.9 6 6 0 0 1 11.6 1.9A4 4 0 0 1 17.5 19z"/></svg>
               <h3>Biz Quiz</h3>
 </a>
-            <a class="hackathon-card glass hackathon-card--sub" href="Workshop & Hackathon/E-Cell IIT Roorkee /Finance_Workshop_Cred_Product_Specialist.pdf" target="_blank" rel="noopener noreferrer" aria-label="Open Finance Workshop certificate PDF in a new tab">
+            <a class="hackathon-card glass hackathon-card--sub" href="Workshop & Hackathon/E-Cell IIT Roorkee/Finance_Workshop_Cred_Product_Specialist.pdf" target="_blank" rel="noopener noreferrer" aria-label="Open Finance Workshop certificate PDF in a new tab">
               <svg class="hackathon-card__icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
               <h3>Finance Workshop</h3>
 </a>
@@ -504,6 +505,7 @@
       <p class="eyebrow reveal">06 &middot; Certificates</p>
 
       <div class="cert-grid reveal" id="cert-grid"></div>
+      <p id="cert-status" class="project-empty" role="status" hidden></p>
       <div class="cert-toggle-wrap">
         <button id="cert-toggle" class="btn btn--ghost btn--cert-toggle" type="button" hidden aria-expanded="false" aria-controls="cert-grid">
           <span id="cert-toggle-label">View All Certificates</span>
@@ -682,6 +684,7 @@
 </div>
       <p class="project-window__subhead">Stack</p>
       <p id="pw-tech" class="project-window__tech"></p>
+      <p id="pw-links" class="project-window__links" hidden></p>
 </div>
 </div>
 </div>

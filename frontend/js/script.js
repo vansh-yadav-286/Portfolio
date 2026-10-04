@@ -680,9 +680,11 @@ async function initCertificates() {
   if (!grid || !toggleBtn || !toggleLabel) return;
 
   const FEATURED_COUNT = 6;
+  const statusEl = $('#cert-status');
   let expanded = false;
   let certificates = [];
 
+  setSectionStatus(statusEl, 'Loading certificates…');
   try {
     const res = await fetch(`${API_BASE_URL}/api/certificates`, { signal: AbortSignal.timeout(8000) });
     const json = await res.json();
@@ -690,16 +692,22 @@ async function initCertificates() {
     certificates = json.data;
   } catch (err) {
     console.error('[certificates] failed to load:', err);
+    setSectionStatus(statusEl, 'Certificates could not be loaded right now. Please refresh in a moment.');
     return;
   }
+  setSectionStatus(statusEl, certificates.length ? '' : 'No certificates yet.');
 
   function renderCard(cert, index) {
-    const a = document.createElement('a');
+    // Without a PDF there is nothing to open, so render a plain card instead of a link.
+    const pdfUrl = safeHttpUrl(cert.pdf_url);
+    const a = document.createElement(pdfUrl ? 'a' : 'div');
     a.className = 'cert-card glass';
-    a.href = cert.pdf_url;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    a.setAttribute('aria-label', `Open ${cert.title} certificate PDF in a new tab`);
+    if (pdfUrl) {
+      a.href = pdfUrl;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.setAttribute('aria-label', `Open ${cert.title} certificate PDF in a new tab`);
+    }
 
     if (index >= FEATURED_COUNT) {
       a.classList.add('cert-card--extra');
@@ -707,16 +715,19 @@ async function initCertificates() {
       a.hidden = true;
     }
 
-    const logo = document.createElement('img');
-    logo.className = 'cert-card__logo';
-    logo.src = cert.image_url;
-    logo.alt = `${cert.issuer} logo`;
-    logo.loading = 'lazy';
-
     const h3 = document.createElement('h3');
     h3.textContent = cert.title;
 
-    a.append(logo, h3);
+    if (cert.image_url) {
+      const logo = document.createElement('img');
+      logo.className = 'cert-card__logo';
+      logo.src = cert.image_url;
+      logo.alt = `${cert.issuer} logo`;
+      logo.loading = 'lazy';
+      a.append(logo, h3);
+    } else {
+      a.append(h3);
+    }
     return a;
   }
 
@@ -1111,6 +1122,24 @@ function unlockDevMode() {
   document.body.appendChild(banner);
 }
 
+// Shows or clears a loading/error/empty message above a grid.
+function setSectionStatus(el, text) {
+  if (!el) return;
+  el.textContent = text || '';
+  el.hidden = !text;
+}
+
+// Only http(s) links are rendered. Anything else (e.g. javascript:) is dropped.
+function safeHttpUrl(value) {
+  if (!value) return null;
+  try {
+    const url = new URL(value, window.location.href);
+    return (url.protocol === 'https:' || url.protocol === 'http:') ? url.href : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 // Fetches projects from GET /api/projects and renders the same card markup
 // the site used to hardcode, then wires up the filter buttons and detail
 // modal (both of which query '.project-card' fresh, so they must run after
@@ -1118,7 +1147,9 @@ function unlockDevMode() {
 async function initProjects() {
   const grid = $('#project-grid');
   if (!grid) return;
+  const statusEl = $('#project-status');
 
+  setSectionStatus(statusEl, 'Loading projects…');
   let projects = [];
   try {
     const res = await fetch(`${API_BASE_URL}/api/projects`, { signal: AbortSignal.timeout(8000) });
@@ -1127,8 +1158,13 @@ async function initProjects() {
     projects = json.data;
   } catch (err) {
     console.error('[projects] failed to load:', err);
+    setSectionStatus(statusEl, 'Projects could not be loaded right now. Please refresh in a moment.');
     return;
   }
+  setSectionStatus(statusEl, projects.length ? '' : 'No projects yet.');
+
+  // Featured projects first; the sort is stable, so the API order is kept otherwise.
+  projects = [...projects].sort((a, b) => Number(b.featured) - Number(a.featured));
 
   function renderCard(project) {
     const tags = (project.technologies || '').split(',').map((t) => t.trim()).filter(Boolean);
@@ -1143,6 +1179,8 @@ async function initProjects() {
     article.dataset.badge = project.category || '';
     article.dataset.tech = tags.join(', ');
     article.dataset.description = project.description;
+    article.dataset.github = safeHttpUrl(project.github_url) || '';
+    article.dataset.live = safeHttpUrl(project.live_url) || '';
 
     const glow = document.createElement('div');
     glow.className = 'project-card__glow';
@@ -1217,6 +1255,19 @@ function initProjectModal() {
     $('#project-window-title').textContent = (card.dataset.title || 'project').toLowerCase().replace(/\s+/g, '-') + '.exe';
     $('#pw-desc').textContent = card.dataset.description || '';
     $('#pw-tech').textContent = card.dataset.tech || '';
+
+    const linksEl = $('#pw-links');
+    linksEl.innerHTML = '';
+    [['GitHub', card.dataset.github], ['Live demo', card.dataset.live]].forEach(([label, url]) => {
+      if (!url) return;
+      const a = document.createElement('a');
+      a.href = url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.textContent = label;
+      linksEl.appendChild(a);
+    });
+    linksEl.hidden = !linksEl.childElementCount;
 
     const featuresWrap = $('#pw-features-wrap');
     const featuresList = $('#pw-features');

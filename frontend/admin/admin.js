@@ -102,6 +102,18 @@ async function initAuth() {
   showLogin();
 }
 
+// Runs a list action (delete, status change). Failures are shown as a toast
+// instead of becoming unhandled promise rejections.
+async function runListAction(action, successMessage, reload) {
+  try {
+    await action();
+    showToast(successMessage);
+    reload();
+  } catch (err) {
+    showToast(err.message || 'Something went wrong.');
+  }
+}
+
 // ---- view switching ----
 
 function initNav() {
@@ -270,11 +282,9 @@ async function loadProjects() {
       loadProjects();
     };
   }));
-  tbody.querySelectorAll('[data-delete]').forEach((btn) => btn.addEventListener('click', async () => {
+  tbody.querySelectorAll('[data-delete]').forEach((btn) => btn.addEventListener('click', () => {
     if (!confirm('Delete this project?')) return;
-    await apiFetch(`/api/projects/${btn.dataset.delete}`, { method: 'DELETE' });
-    showToast('Project deleted');
-    loadProjects();
+    runListAction(() => apiFetch(`/api/projects/${btn.dataset.delete}`, { method: 'DELETE' }), 'Project deleted', loadProjects);
   }));
 }
 
@@ -328,11 +338,9 @@ async function loadCertificates() {
       loadCertificates();
     };
   }));
-  tbody.querySelectorAll('[data-delete]').forEach((btn) => btn.addEventListener('click', async () => {
+  tbody.querySelectorAll('[data-delete]').forEach((btn) => btn.addEventListener('click', () => {
     if (!confirm('Delete this certificate?')) return;
-    await apiFetch(`/api/certificates/${btn.dataset.delete}`, { method: 'DELETE' });
-    showToast('Certificate deleted');
-    loadCertificates();
+    runListAction(() => apiFetch(`/api/certificates/${btn.dataset.delete}`, { method: 'DELETE' }), 'Certificate deleted', loadCertificates);
   }));
 }
 
@@ -375,16 +383,15 @@ async function loadMessages() {
     tbody.appendChild(tr);
   });
 
-  tbody.querySelectorAll('[data-status]').forEach((select) => select.addEventListener('change', async () => {
-    await apiFetch(`/api/contact/${select.dataset.status}`, { method: 'PATCH', body: { status: select.value } });
-    showToast('Message updated');
-    loadMessages();
+  tbody.querySelectorAll('[data-status]').forEach((select) => select.addEventListener('change', () => {
+    runListAction(
+      () => apiFetch(`/api/contact/${select.dataset.status}`, { method: 'PATCH', body: { status: select.value } }),
+      'Message updated', loadMessages
+    );
   }));
-  tbody.querySelectorAll('[data-delete]').forEach((btn) => btn.addEventListener('click', async () => {
+  tbody.querySelectorAll('[data-delete]').forEach((btn) => btn.addEventListener('click', () => {
     if (!confirm('Delete this message?')) return;
-    await apiFetch(`/api/contact/${btn.dataset.delete}`, { method: 'DELETE' });
-    showToast('Message deleted');
-    loadMessages();
+    runListAction(() => apiFetch(`/api/contact/${btn.dataset.delete}`, { method: 'DELETE' }), 'Message deleted', loadMessages);
   }));
 }
 

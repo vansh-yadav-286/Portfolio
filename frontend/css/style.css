@@ -523,6 +523,8 @@ html.cursor-hover #cursor-ring { width: 52px; height: 52px; margin: -26px 0 0 -2
 .project-card__title { font-size: 1.25rem; margin-bottom: .55rem; }
 .project-card__desc { color: var(--text-lo); font-size: .92rem; margin-bottom: 1.1rem; line-height: 1.55; }
 .project-card__tags { display: flex; flex-wrap: wrap; gap: .4rem; }
+.project-window__links { display: flex; gap: 1rem; margin-top: .75rem; font-family: var(--font-mono); font-size: .85rem; }
+.project-window__links a { color: var(--amber); }
 .project-empty { color: var(--text-lo); font-family: var(--font-mono); font-size: .9rem; padding: 2rem 0; text-align: center; }
 
 .project-window { width: min(560px, 92vw); }
