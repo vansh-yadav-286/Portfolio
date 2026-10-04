@@ -42,6 +42,3 @@ def delete_message(db: Session, message_id: int) -> None:
     db.delete(message)
     db.commit()
 
-
-def count_unread(db: Session) -> int:
-    return db.query(ContactMessage).filter(ContactMessage.status == ContactStatus.unread).count()

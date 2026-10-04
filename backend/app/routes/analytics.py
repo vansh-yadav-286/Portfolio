@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_admin
+from app.core.rate_limit import get_client_ip, limiter
 from app.database.database import get_db
 from app.models.user import User
 from app.schemas.visitor import VisitCreate
@@ -12,12 +13,13 @@ router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
 
 @router.post("/visit", status_code=201)
+@limiter.limit("60/minute")
 def record_visit(payload: VisitCreate, request: Request, db: Session = Depends(get_db)):
     visitor = analytics_service.record_visit(
         db,
         payload,
         user_agent=request.headers.get("user-agent"),
-        ip=request.client.host if request.client else None,
+        ip=get_client_ip(request),
     )
     return success_response({"id": visitor.id}, "Visit recorded", status_code=201)
 

@@ -53,14 +53,19 @@ uvicorn app.main:app --reload
 
 API docs: `http://localhost:8000/docs` and `http://localhost:8000/redoc`.
 
-The admin account (role `admin`) is created automatically on first startup from `ADMIN_EMAIL` / `ADMIN_PASSWORD` — no manual seeding needed. Log in at `POST /api/auth/login` with those credentials to use the admin dashboard.
+The admin account (role `admin`) is created automatically on first startup from `ADMIN_EMAIL` / `ADMIN_PASSWORD` — no manual seeding needed.
+
+**Note:** the admin account is only created if the email does not exist yet. Changing `ADMIN_PASSWORD` later does **not** update the existing account; change the password in the database (or delete the row and restart) instead. Log in at `POST /api/auth/login` with those credentials to use the admin dashboard.
 
 ## Tests
 
 ```bash
 cd backend
+pip install -r requirements-dev.txt
 pytest
 ```
+
+CI runs the same suite on every push and pull request that touches `backend/` (see `.github/workflows/backend-tests.yml`).
 
 Tests run against a throwaway SQLite database (`tests/conftest.py`), independent of your dev Postgres instance.
 

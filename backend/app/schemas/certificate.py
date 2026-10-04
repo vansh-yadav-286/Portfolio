@@ -2,15 +2,17 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
+from app.schemas.common import SafeUrl
+
 
 class CertificateBase(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     issuer: str = Field(min_length=1, max_length=200)
     issue_date: date | None = None
     credential_id: str | None = Field(default=None, max_length=200)
-    credential_url: str | None = None
-    image_url: str | None = None
-    pdf_url: str | None = None
+    credential_url: SafeUrl = None
+    image_url: SafeUrl = None
+    pdf_url: SafeUrl = None
 
 
 class CertificateCreate(CertificateBase):
@@ -22,9 +24,9 @@ class CertificateUpdate(BaseModel):
     issuer: str | None = Field(default=None, min_length=1, max_length=200)
     issue_date: date | None = None
     credential_id: str | None = Field(default=None, max_length=200)
-    credential_url: str | None = None
-    image_url: str | None = None
-    pdf_url: str | None = None
+    credential_url: SafeUrl = None
+    image_url: SafeUrl = None
+    pdf_url: SafeUrl = None
 
 
 class CertificateOut(CertificateBase):

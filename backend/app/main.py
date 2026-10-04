@@ -61,7 +61,12 @@ async def api_http_exception_handler(request, exc: HTTPException):
 async def validation_exception_handler(request, exc: RequestValidationError):
     return JSONResponse(
         status_code=422,
-        content={"success": False, "message": "Validation error", "errors": exc.errors()},
+        # "ctx" can hold raw exception objects (from custom validators), which are not JSON-serializable.
+        content={
+            "success": False,
+            "message": "Validation error",
+            "errors": [{k: v for k, v in err.items() if k != "ctx"} for err in exc.errors()],
+        },
     )
 
 
