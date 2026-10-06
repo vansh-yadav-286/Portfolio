@@ -671,7 +671,8 @@ async function initCertificates() {
   const toggleLabel = $('#cert-toggle-label');
   if (!grid || !toggleBtn || !toggleLabel) return;
 
-  const FEATURED_COUNT = 6;
+  // 8 = two full rows on desktop; the rest sit behind "View All Certificates"
+  const FEATURED_COUNT = 8;
   const statusEl = $('#cert-status');
   let expanded = false;
   let certificates = [];
