@@ -5,9 +5,12 @@ const TOKEN_KEY = 'portfolioAdminToken';
 function $(sel, ctx = document) { return ctx.querySelector(sel); }
 function $$(sel, ctx = document) { return Array.from(ctx.querySelectorAll(sel)); }
 
-function getToken() { return localStorage.getItem(TOKEN_KEY); }
-function setToken(token) { localStorage.setItem(TOKEN_KEY, token); }
-function clearToken() { localStorage.removeItem(TOKEN_KEY); }
+// The JWT lives in sessionStorage: it is cleared when the tab closes and is never
+// shared with other tabs. The password is never stored in the browser at all.
+// Note: any script on this page can still read the token, so keep this page free of third-party scripts.
+function getToken() { return sessionStorage.getItem(TOKEN_KEY); }
+function setToken(token) { sessionStorage.setItem(TOKEN_KEY, token); }
+function clearToken() { sessionStorage.removeItem(TOKEN_KEY); }
 
 function showToast(message) {
   const container = $('#admin-toast-container');

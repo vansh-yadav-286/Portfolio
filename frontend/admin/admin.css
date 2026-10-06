@@ -129,6 +129,7 @@ body {
   position: fixed; inset: 0; background: rgba(0,0,0,0.6);
   display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 50;
 }
+.admin-modal-overlay[hidden] { display: none; }
 .admin-modal { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 24px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; }
 .admin-modal h3 { margin-top: 0; }
 .admin-modal__actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
