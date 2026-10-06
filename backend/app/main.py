@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -9,10 +10,12 @@ from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
 from app.core.rate_limit import limiter
-from app.database.database import SessionLocal
+from app.database.database import SessionLocal, check_database_connection
 from app.routes import analytics, auth, certificates, contacts, projects
 from app.services.auth_service import ensure_admin_seeded
 from app.utils.helpers import success_response
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -36,7 +39,7 @@ app.state.limiter = limiter
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_url],
+    allow_origins=settings.frontend_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -88,4 +91,17 @@ app.include_router(analytics.router)
 
 @app.get("/health")
 def health_check():
-    return success_response({"status": "ok"}, "Service is healthy")
+    # Runs SELECT 1 against Postgres, so "ok" means the database answered, not just that DATABASE_URL is set.
+    try:
+        check_database_connection()
+    except Exception:
+        logger.exception("Health check could not reach the database")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "success": False,
+                "message": "Database unreachable",
+                "data": {"status": "degraded", "database": "unreachable"},
+            },
+        )
+    return success_response({"status": "ok", "database": "connected"}, "Service is healthy")

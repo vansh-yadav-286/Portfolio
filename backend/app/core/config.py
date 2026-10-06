@@ -21,5 +21,11 @@ class Settings(BaseSettings):
             url = url.replace("postgresql://", "postgresql+psycopg://", 1)
         return url
 
+    @property
+    def frontend_origins(self) -> list[str]:
+        # FRONTEND_URL can list several origins, comma-separated, e.g.
+        # "https://<user>.github.io,http://localhost:5500". Never "*".
+        return [origin.strip().rstrip("/") for origin in self.frontend_url.split(",") if origin.strip()]
+
 
 settings = Settings()

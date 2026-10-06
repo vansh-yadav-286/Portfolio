@@ -12,7 +12,8 @@ venv/
 
 # Environment secrets — never commit real values
 .env
-.env.local
+.env.*
+!.env.example
 
 # Local SQLite databases used for scratch/dev testing
 *.db
