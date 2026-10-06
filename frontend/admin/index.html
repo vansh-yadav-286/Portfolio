@@ -35,6 +35,7 @@
       <button type="button" class="admin-nav__link is-active" data-view="overview">Overview</button>
       <button type="button" class="admin-nav__link" data-view="projects">Projects</button>
       <button type="button" class="admin-nav__link" data-view="certificates">Certificates</button>
+      <button type="button" class="admin-nav__link" data-view="hackathons">Workshop &amp; Hackathons</button>
       <button type="button" class="admin-nav__link" data-view="messages">Contact Messages</button>
       <button type="button" class="admin-nav__link" data-view="analytics">Analytics</button>
     </nav>
@@ -68,6 +69,18 @@
       </div>
       <div class="admin-table-wrap"><table class="admin-table" id="certificates-table">
         <thead><tr><th>Title</th><th>Issuer</th><th>Credential ID</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </section>
+
+    <!-- Workshop & Hackathons -->
+    <section data-view-panel="hackathons" class="admin-view" hidden>
+      <div class="admin-view__header">
+        <h2>Workshop &amp; Hackathons</h2>
+        <button type="button" class="admin-btn admin-btn--primary" id="hackathon-new-btn">+ New Workshop / Hackathon</button>
+      </div>
+      <div class="admin-table-wrap"><table class="admin-table" id="hackathons-table">
+        <thead><tr><th>Title</th><th>Type</th><th>Organizer</th><th>Visible</th><th>Order</th><th></th></tr></thead>
         <tbody></tbody>
       </table></div>
     </section>

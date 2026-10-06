@@ -131,7 +131,7 @@ function initNav() {
 
 function loadView(view) {
   $$('[data-view-panel]').forEach((panel) => { panel.hidden = panel.dataset.viewPanel !== view; });
-  const loaders = { overview: loadOverview, projects: loadProjects, certificates: loadCertificates, messages: loadMessages, analytics: loadAnalytics };
+  const loaders = { overview: loadOverview, projects: loadProjects, certificates: loadCertificates, hackathons: loadHackathons, messages: loadMessages, analytics: loadAnalytics };
   (loaders[view] || (() => {}))().catch((err) => showToast(err.message));
 }
 
@@ -200,6 +200,14 @@ function openModal(title, fields, values = {}) {
     let input;
     if (field.type === 'textarea') {
       input = document.createElement('textarea');
+    } else if (field.type === 'select') {
+      input = document.createElement('select');
+      field.options.forEach((opt) => {
+        const option = document.createElement('option');
+        option.value = opt.value;
+        option.textContent = opt.label;
+        input.appendChild(option);
+      });
     } else if (field.type === 'checkbox') {
       input = document.createElement('input');
       input.type = 'checkbox';
@@ -233,14 +241,20 @@ function initModal() {
     if (!modalSubmitHandler) return;
     const form = e.target;
     const values = {};
-    $$('input, textarea', form).forEach((input) => {
+    $$('input, textarea, select', form).forEach((input) => {
       values[input.name] = input.type === 'checkbox' ? input.checked : input.value;
     });
+    const submitBtn = $('button[type="submit"]', form);
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Saving…';
     try {
       await modalSubmitHandler(values);
       closeModal();
     } catch (err) {
       $('#admin-modal-error').textContent = err.message || 'Something went wrong.';
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Save';
     }
   });
 }
@@ -359,6 +373,189 @@ function initCertificateCreate() {
   });
 }
 
+// ---- workshops & hackathons ----
+
+const HACKATHON_ICONS = ['bolt', 'layers', 'clock', 'trophy', 'book', 'code', 'globe', 'users'];
+const HACKATHON_FIELDS = [
+  { name: 'title', label: 'Title', required: true },
+  { name: 'type', label: 'Type', type: 'select', required: true,
+    options: [{ value: 'hackathon', label: 'Hackathon' }, { value: 'workshop', label: 'Workshop' }] },
+  { name: 'description', label: 'Description', type: 'textarea' },
+  { name: 'organizer', label: 'Organizer' },
+  { name: 'date', label: 'Date', type: 'date' },
+  { name: 'location', label: 'Location' },
+  { name: 'icon', label: 'Icon', type: 'select',
+    options: [{ value: '', label: 'None' }].concat(HACKATHON_ICONS.map((i) => ({ value: i, label: i }))) },
+  { name: 'image_url', label: 'Image URL (optional)' },
+  { name: 'certificate_url', label: 'Certificate URL' },
+  { name: 'event_url', label: 'Event URL' },
+  { name: 'subitems', label: 'Grouped sub-items (JSON list: [{"title": "...", "certificate_url": "..."}])', type: 'textarea' },
+  { name: 'display_order', label: 'Display order (lower shows first)', type: 'number' },
+  { name: 'is_visible', label: 'Visible on the public site', type: 'checkbox' }
+];
+
+let hackathonItems = [];
+
+// Same rule as the backend: http(s) links or relative paths only.
+function isAllowedUrl(value) {
+  if (!value) return true;
+  if (value.startsWith('//')) return false;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return /^https?:\/\//i.test(value);
+  return true;
+}
+
+// Turns the modal's text values into the API payload, or throws a message for the form.
+function buildHackathonPayload(values) {
+  const text = (v) => { const t = String(v ?? '').trim(); return t === '' ? null : t; };
+  const title = text(values.title);
+  if (!title) throw new Error('Title is required.');
+  if (title.length > 200) throw new Error('Title must be 200 characters or fewer.');
+  if (!['hackathon', 'workshop'].includes(values.type)) throw new Error('Choose a type.');
+  const description = text(values.description) || '';
+  if (description.length > 2000) throw new Error('Description must be 2000 characters or fewer.');
+
+  for (const name of ['image_url', 'certificate_url', 'event_url']) {
+    const url = text(values[name]);
+    if (url && !isAllowedUrl(url)) throw new Error('Links must start with https://, http://, or be a relative path such as "assets/file.pdf".');
+  }
+
+  let subitems = null;
+  const rawSub = text(values.subitems);
+  if (rawSub) {
+    let parsed;
+    try { parsed = JSON.parse(rawSub); } catch (e) { throw new Error('Sub-items must be valid JSON, e.g. [{"title": "...", "certificate_url": "..."}].'); }
+    if (!Array.isArray(parsed)) throw new Error('Sub-items must be a JSON list.');
+    if (parsed.length > 20) throw new Error('At most 20 sub-items are allowed.');
+    subitems = parsed.map((s) => {
+      if (!s || typeof s !== 'object' || !text(s.title)) throw new Error('Each sub-item needs a title.');
+      if (s.certificate_url && !isAllowedUrl(String(s.certificate_url))) throw new Error('Sub-item links must be https:// links or relative paths.');
+      return { title: String(s.title).trim(), certificate_url: text(s.certificate_url) };
+    });
+  }
+
+  const order = Number(values.display_order === '' || values.display_order == null ? 0 : values.display_order);
+  if (!Number.isInteger(order) || order < 0 || order > 100000) throw new Error('Display order must be a whole number from 0 to 100000.');
+  if (values.date && !/^\d{4}-\d{2}-\d{2}$/.test(values.date)) throw new Error('Date must be a valid date.');
+
+  return {
+    title,
+    type: values.type,
+    description,
+    organizer: text(values.organizer),
+    date: text(values.date),
+    location: text(values.location),
+    icon: text(values.icon),
+    image_url: text(values.image_url),
+    certificate_url: text(values.certificate_url),
+    event_url: text(values.event_url),
+    subitems,
+    display_order: order,
+    is_visible: !!values.is_visible
+  };
+}
+
+function hackathonFormValues(item) {
+  return {
+    ...item,
+    date: item.date || '',
+    icon: item.icon || '',
+    subitems: item.subitems ? JSON.stringify(item.subitems, null, 2) : ''
+  };
+}
+
+async function loadHackathons() {
+  const tbody = $('#hackathons-table tbody');
+  tbody.innerHTML = '<tr><td colspan="6" style="color:var(--muted)">Loading…</td></tr>';
+  let items;
+  try {
+    items = await apiFetch('/api/hackathons/manage');
+  } catch (err) {
+    tbody.innerHTML = '';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td colspan="6" class="admin-error">${escapeHtml(err.message)}</td>`;
+    tbody.appendChild(tr);
+    throw err;
+  }
+  hackathonItems = items;
+  tbody.innerHTML = '';
+  if (items.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="color:var(--muted)">No workshops or hackathons yet.</td></tr>';
+    return;
+  }
+
+  items.forEach((item, index) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${escapeHtml(item.title)}</td>
+      <td>${escapeHtml(item.type)}</td>
+      <td>${escapeHtml(item.organizer || '')}</td>
+      <td><input type="checkbox" data-visible="${item.id}" ${item.is_visible ? 'checked' : ''} aria-label="Visible on site: ${escapeHtml(item.title)}" /></td>
+      <td class="row-actions">
+        <button type="button" class="admin-btn" data-up="${index}" ${index === 0 ? 'disabled' : ''} aria-label="Move up">↑</button>
+        <button type="button" class="admin-btn" data-down="${index}" ${index === items.length - 1 ? 'disabled' : ''} aria-label="Move down">↓</button>
+      </td>
+      <td class="row-actions">
+        <button type="button" class="admin-btn" data-edit="${item.id}">Edit</button>
+        <button type="button" class="admin-btn admin-btn--danger" data-delete="${item.id}">Delete</button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll('[data-visible]').forEach((box) => box.addEventListener('change', () => {
+    runListAction(
+      () => apiFetch(`/api/hackathons/${box.dataset.visible}`, { method: 'PUT', body: { is_visible: box.checked } }),
+      box.checked ? 'Shown on the site' : 'Hidden from the site',
+      loadHackathons
+    );
+  }));
+
+  tbody.querySelectorAll('[data-up], [data-down]').forEach((btn) => btn.addEventListener('click', () => {
+    const from = Number(btn.dataset.up ?? btn.dataset.down);
+    const to = btn.dataset.up !== undefined ? from - 1 : from + 1;
+    runListAction(() => moveHackathon(from, to), 'Order updated', loadHackathons);
+  }));
+
+  tbody.querySelectorAll('[data-edit]').forEach((btn) => btn.addEventListener('click', () => {
+    const item = items.find((i) => String(i.id) === btn.dataset.edit);
+    openModal('Edit Workshop / Hackathon', HACKATHON_FIELDS, hackathonFormValues(item));
+    modalSubmitHandler = async (values) => {
+      await apiFetch(`/api/hackathons/${item.id}`, { method: 'PUT', body: buildHackathonPayload(values) });
+      showToast('Workshop / hackathon updated');
+      loadHackathons();
+    };
+  }));
+
+  tbody.querySelectorAll('[data-delete]').forEach((btn) => btn.addEventListener('click', () => {
+    if (!confirm('Delete this workshop or hackathon? This cannot be undone.')) return;
+    runListAction(() => apiFetch(`/api/hackathons/${btn.dataset.delete}`, { method: 'DELETE' }), 'Workshop / hackathon deleted', loadHackathons);
+  }));
+}
+
+// Swaps one item with its neighbour, then renumbers display_order so the order is always distinct.
+async function moveHackathon(from, to) {
+  if (to < 0 || to >= hackathonItems.length) return;
+  const reordered = hackathonItems.slice();
+  const [moved] = reordered.splice(from, 1);
+  reordered.splice(to, 0, moved);
+  const changes = reordered
+    .map((item, position) => ({ item, position }))
+    .filter(({ item, position }) => item.display_order !== position);
+  for (const { item, position } of changes) {
+    await apiFetch(`/api/hackathons/${item.id}`, { method: 'PUT', body: { display_order: position } });
+  }
+}
+
+function initHackathonCreate() {
+  $('#hackathon-new-btn').addEventListener('click', () => {
+    openModal('New Workshop / Hackathon', HACKATHON_FIELDS, { type: 'workshop', is_visible: true, display_order: hackathonItems.length });
+    modalSubmitHandler = async (values) => {
+      await apiFetch('/api/hackathons', { method: 'POST', body: buildHackathonPayload(values) });
+      showToast('Workshop / hackathon created');
+      loadHackathons();
+    };
+  });
+}
+
 // ---- contact messages ----
 
 async function loadMessages() {
@@ -405,5 +602,6 @@ document.addEventListener('DOMContentLoaded', () => {
   initModal();
   initProjectCreate();
   initCertificateCreate();
+  initHackathonCreate();
   initAuth();
 });
