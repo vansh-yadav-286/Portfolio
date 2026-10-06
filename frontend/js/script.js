@@ -607,15 +607,9 @@ async function initGithubStats() {
   }
 }
 
-function initHackathonAccordion() {
-  const toggle = $('#ecell-toggle');
-  const panel = $('#ecell-panel');
-  if (!toggle || !panel) return;
-
-  $$('.hackathon-card--sub', panel).forEach((card, i) => {
-    card.style.setProperty('--sub-stagger', String(i));
-  });
-
+// Expands/collapses a grouped card's sub-items panel. Used by the hackathon cards
+// that have sub-items (rendered from the API).
+function wireAccordion(toggle, panel) {
   // same inert/aria-hidden trick as the boot screen above
   function setInert(el, isInert) {
     if ('inert' in el) el.inert = isInert;
@@ -663,6 +657,128 @@ function initHackathonAccordion() {
   window.addEventListener('resize', debounce(() => {
     if (open) panel.style.maxHeight = panel.scrollHeight + 'px';
   }, 150));
+}
+
+// Fixed icon set. The API stores only the key, so the markup never comes from the database.
+const HACKATHON_ICON_PATHS = {
+  bolt: '<path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>',
+  layers: '<path d="M22 10v6M2 10l10-5 10 5-10 5-10-5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>',
+  trophy: '<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M7 6H4v2a3 3 0 0 0 3 3M17 6h3v2a3 3 0 0 1-3 3"/>',
+  book: '<path d="M4 4h6a3 3 0 0 1 3 3v13a2 2 0 0 0-2-2H4z"/><path d="M20 4h-6a3 3 0 0 0-3 3v13a2 2 0 0 1 2-2h7z"/>',
+  code: '<path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+  users: '<circle cx="9" cy="8" r="4"/><path d="M2 21v-1a6 6 0 0 1 12 0v1M16 3.1a4 4 0 0 1 0 7.8M22 21v-1a6 6 0 0 0-4-5.7"/>'
+};
+
+function hackathonIconSvg(key) {
+  const paths = HACKATHON_ICON_PATHS[key] || HACKATHON_ICON_PATHS.book;
+  return `<svg class="hackathon-card__icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">${paths}</svg>`;
+}
+
+// Builds one card from an API item. Everything from the API is set with textContent or
+// attributes, never concatenated into HTML.
+function renderHackathonCard(item) {
+  const subitems = Array.isArray(item.subitems) ? item.subitems : [];
+  const fragment = document.createDocumentFragment();
+
+  if (subitems.length) {
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'hackathon-card glass hackathon-card--toggle';
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.innerHTML = hackathonIconSvg(item.icon)
+      + '<svg class="hackathon-card__chevron" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>';
+    const h3 = document.createElement('h3');
+    h3.textContent = item.title;
+    toggle.appendChild(h3);
+    if (item.organizer) toggle.appendChild(metaLine(item));
+
+    const panel = document.createElement('div');
+    panel.className = 'hackathon-accordion-panel';
+    panel.setAttribute('role', 'region');
+    const inner = document.createElement('div');
+    inner.className = 'hackathon-accordion-inner';
+    subitems.forEach((sub, i) => {
+      const href = safeHttpUrl(sub.certificate_url);
+      const card = document.createElement(href ? 'a' : 'div');
+      card.className = 'hackathon-card glass hackathon-card--sub';
+      card.style.setProperty('--sub-stagger', String(i));
+      if (href) {
+        card.href = href;
+        card.target = '_blank';
+        card.rel = 'noopener noreferrer';
+        card.setAttribute('aria-label', `Open ${sub.title} certificate PDF in a new tab`);
+      }
+      card.innerHTML = hackathonIconSvg('book');
+      const subTitle = document.createElement('h3');
+      subTitle.textContent = sub.title;
+      card.appendChild(subTitle);
+      inner.appendChild(card);
+    });
+    panel.appendChild(inner);
+
+    fragment.append(toggle, panel);
+    wireAccordion(toggle, panel);
+    return fragment;
+  }
+
+  const link = safeHttpUrl(item.certificate_url) || safeHttpUrl(item.event_url);
+  const card = document.createElement(link ? 'a' : 'div');
+  card.className = 'hackathon-card glass';
+  if (link) {
+    card.href = link;
+    card.target = '_blank';
+    card.rel = 'noopener noreferrer';
+    card.setAttribute('aria-label', `Open ${item.title} in a new tab`);
+  }
+  const imageUrl = safeHttpUrl(item.image_url);
+  if (imageUrl) {
+    const img = document.createElement('img');
+    img.className = 'hackathon-card__image';
+    img.src = imageUrl;
+    img.alt = '';
+    img.loading = 'lazy';
+    card.appendChild(img);
+  } else {
+    card.innerHTML = hackathonIconSvg(item.icon);
+  }
+  const h3 = document.createElement('h3');
+  h3.textContent = item.title;
+  card.appendChild(h3);
+  if (item.organizer || item.date || item.location) card.appendChild(metaLine(item));
+  fragment.appendChild(card);
+  return fragment;
+}
+
+function metaLine(item) {
+  const p = document.createElement('p');
+  p.className = 'hackathon-card__meta';
+  const date = item.date ? new Date(item.date + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) : '';
+  p.textContent = [item.organizer, date, item.location].filter(Boolean).join(' · ');
+  return p;
+}
+
+// GET /api/hackathons (visible items only, already ordered by the backend).
+async function initHackathons() {
+  const grid = $('#hackathon-grid');
+  const statusEl = $('#hackathon-status');
+  if (!grid) return;
+
+  setSectionStatus(statusEl, 'Loading workshops and hackathons…');
+  let items = [];
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/hackathons`, { signal: AbortSignal.timeout(8000) });
+    const json = await res.json();
+    if (!res.ok || !json.success) throw new Error(json.message || 'Failed to load workshops and hackathons');
+    items = json.data;
+  } catch (err) {
+    console.error('[hackathons] failed to load:', err);
+    setSectionStatus(statusEl, 'Workshops and hackathons could not be loaded right now. Please refresh in a moment.');
+    return;
+  }
+  setSectionStatus(statusEl, items.length ? '' : 'No workshops or hackathons yet.');
+  items.forEach((item) => grid.appendChild(renderHackathonCard(item)));
 }
 
 async function initCertificates() {
@@ -1503,7 +1619,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initCursor, initScrollChrome, initClock, initNav, initScrollReveal,
     initOrbitPause, initTilt, initMagnetic, initParallax, initRipple,
     initNeuralCanvas, initBootRain, initRoleTypewriter, initTerminal,
-    initHackathonAccordion,
+    initHackathons,
     initGithubStats, initCertificates, initProjects, initContact, initCommandPalette, initAIWidget,
     initTheme, initMusicToggle, initDevMode, initAnalytics
   ];
