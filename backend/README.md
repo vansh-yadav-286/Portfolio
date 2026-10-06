@@ -90,6 +90,7 @@ All responses use a consistent envelope:
 | POST/PUT/DELETE | `/api/certificates[/{id}]` | admin |
 | POST | `/api/contact` | public |
 | GET/PATCH/DELETE | `/api/contact[/{id}]` | admin |
+| GET | `/health` | public — runs `SELECT 1`; returns 503 if PostgreSQL is unreachable |
 | POST | `/api/analytics/visit` | public |
 | GET | `/api/analytics` | admin |
 
@@ -98,7 +99,7 @@ All responses use a consistent envelope:
 - Passwords hashed with bcrypt (passlib).
 - JWT (HS256) via OAuth2PasswordBearer; admin-only routes are guarded by a role check (`app/core/dependencies.py`).
 - `/api/auth/login` is rate-limited (slowapi) against brute-force attempts.
-- CORS allows only `FRONTEND_URL` — never `*` — since the API is authenticated.
+- CORS allows only the origins listed in `FRONTEND_URL` (comma-separated, e.g. `https://<user>.github.io,http://localhost:5500`) — never `*` — since the API is authenticated.
 - All exceptions are caught centrally (`app/main.py`) so stack traces and internals are never returned to the client.
 
 ## Deploying to Render
@@ -110,7 +111,7 @@ This service is deployed on **Render**. Do not use Railway. See [`../render.yaml
 3. Build command: `pip install -r backend/requirements.txt && cd database && alembic upgrade head`
 4. Start command: `cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 5. Attach the managed PostgreSQL instance (the blueprint provisions one and injects `DATABASE_URL` automatically).
-6. Set the remaining environment variables in the Render dashboard (never commit them): `SECRET_KEY`, `ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `FRONTEND_URL` (your GitHub Pages origin), `ADMIN_EMAIL`, `ADMIN_PASSWORD`.
+6. Set the remaining environment variables in the Render dashboard (never commit them): `SECRET_KEY`, `ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `FRONTEND_URL` (your GitHub Pages origin, plus `http://localhost:5500` for local development, comma-separated), `ADMIN_EMAIL`, `ADMIN_PASSWORD`.
 
 Render supplies `$PORT` at runtime; the start command binds to it rather than a hardcoded port.
 

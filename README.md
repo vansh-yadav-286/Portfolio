@@ -278,6 +278,8 @@ GitHub Pages                       Render
                                           schema + migrations in database/
 ```
 
+Production flow: **GitHub Pages → HTML/CSS/JavaScript (`fetch()`) → FastAPI on Render → SQLAlchemy (psycopg) → PostgreSQL on Render.** Nothing else is part of the production stack.
+
 ### 3. Frontend (`frontend/`)
 
 Plain HTML/CSS/JavaScript, no build step, deployed on **GitHub Pages**.
@@ -368,6 +370,8 @@ ADMIN_PASSWORD=change_this_password
 ```
 Never commit a real `.env`. The admin account is created automatically on backend startup from `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
 
+`FRONTEND_URL` takes a comma-separated list of allowed origins, for example `https://<your-user>.github.io,http://localhost:5500`. CORS allows only these origins. On Render, `DATABASE_URL` is injected from the attached PostgreSQL instance; set `SECRET_KEY`, `FRONTEND_URL`, `ADMIN_EMAIL` and `ADMIN_PASSWORD` in the Render dashboard. Never put their values in this repo.
+
 ### 8. Authentication
 
 FastAPI + OAuth2PasswordBearer + JWT (HS256) + bcrypt password hashing. `POST /api/auth/register` creates a regular (`user`-role) account; the seeded admin account is the only `admin`-role user. Admin-only routes (managing projects/certificates/contact messages/analytics) are protected by a role dependency. `/api/auth/login` is rate-limited against brute-force attempts. See [`backend/README.md`](backend/README.md) for the full route table.
@@ -395,15 +399,19 @@ startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
 ```
 Set `SECRET_KEY`, `FRONTEND_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` in the Render dashboard; `DATABASE_URL` is injected automatically from the attached managed Postgres instance. Full steps in [`backend/README.md`](backend/README.md).
 
-After deploying, update `API_BASE_URL` in `frontend/js/config.js` to the Render URL.
+After deploying, update `API_BASE_URL` in `frontend/js/config.js` to the Render URL. Render's health check uses `GET /health`, which runs `SELECT 1` against PostgreSQL and returns 503 if the database is unreachable.
 
 ### 12. Security
 
-Bcrypt password hashing; JWT auth with role-based admin authorization; CORS restricted to `FRONTEND_URL` only (never `*`); centralized exception handling so stack traces/DB errors are never returned to the client; rate limiting on login; Pydantic validation on every request body; no secrets or `.env` files committed.
+Bcrypt password hashing; JWT auth with role-based admin authorization; CORS restricted to the origins listed in `FRONTEND_URL` (never `*`); centralized exception handling so stack traces/DB errors are never returned to the client; rate limiting on login; Pydantic validation on every request body; no secrets or `.env` files committed.
 
-### 13. Firebase (Google / Apple sign-in) — unchanged, separate from the admin system
+### 13. Visitor login (backend-backed)
 
-The portfolio's own visitor login gate (separate from the admin dashboard above) still uses Firebase for Google/Apple sign-in, plus a client-side demo login for username/password, exactly as before — see the section below. This was kept as-is rather than migrated: it gates casual visitors from the page itself and isn't the "admin manages content" auth the rest of this document describes, which now lives entirely in the FastAPI backend.
+The login and signup screens call the FastAPI backend: `POST /api/auth/register` and `POST /api/auth/login`. Visitor accounts are stored in PostgreSQL (the `users` table, `user` role). Passwords are sent over HTTPS only. They are never hashed or stored in the browser.
+
+After a successful login the browser stores one flag in localStorage, `portfolioAuth = { user, ts }`. `index.html` reads it before first paint to choose between the login screen and the portfolio. The flag holds no password and no token. It only controls which screen is drawn, so it is not a security boundary: the portfolio content is public anyway, and the admin dashboard is protected by the backend's JWT and admin-role check.
+
+Google and Apple sign-in (Firebase) has been removed. No Firebase code, config or packages remain.
 
 ### 14. Cleanup performed during this restructure
 
@@ -413,10 +421,11 @@ The portfolio's own visitor login gate (separate from the admin dashboard above)
 
 **Created**: `.github/workflows/deploy-pages.yml` — GitHub Pages' branch-deploy mode can't serve a subfolder like `frontend/`, so this workflow deploys it via GitHub Actions instead (see §11).
 
-**Kept as-is**: `react-contact-cards/` and `react-like-card/` (standalone Vite/React practice projects, not part of the portfolio page — no references to them exist in `index.html`, `script.js` or `style.css`; they're documented separately below). The visitor login gate's Firebase/localStorage implementation (see §13).
+**Kept as-is**: `react-contact-cards/` and `react-like-card/` (standalone Vite/React practice projects, not part of the portfolio page — no references to them exist in `index.html`, `script.js` or `style.css`; they're documented separately below). The visitor login gate now uses backend auth (see §13).
 
 ### Known limitations
-- The portfolio's own visitor login gate is a client-side demo, unrelated to the real backend auth used for the admin dashboard (see §13).
+- The `portfolioAuth` flag in localStorage is a display gate only. It can be edited in devtools. The portfolio content behind it is public anyway (see §13).
+- The admin JWT is kept in sessionStorage, so it is cleared when the tab closes. Any script running on the admin page can still read it, so keep that page free of third-party scripts.
 - Anyone can submit the contact form; no spam protection beyond basic validation.
 - The mobile navbar buttons overflow the screen by ~18px at 390px width — pre-existing, unrelated to this restructure.
 
@@ -427,19 +436,3 @@ npm install
 npm run dev                 # open the URL Vite prints
 ```
 These are standalone practice projects and are not part of the portfolio page or its deployment.
-
----
-
-## Google / Apple sign-in (Firebase) — portfolio visitor gate
-
-The login page's Google and Apple buttons use Firebase Authentication (`signInWithPopup`). Username/password login and signup still work as before; Google/Apple is an additional method. Sessions are stored in `localStorage` as `portfolioAuth` (`{ user, provider, ts }`). This is a frontend demo gate for casual visitors — it is separate from, and does not affect, the real JWT-backed admin authentication described above.
-
-**Setup**
-1. Create a project at https://console.firebase.google.com, then **Project settings -> Your apps -> Add app -> Web**.
-2. Copy the `firebaseConfig` values into the `firebaseConfig` block near the top of `frontend/js/script.js` (client config is not secret; never add a service-account key).
-3. **Authentication -> Sign-in method**: enable **Google**, and **Apple** if you want it.
-4. **Authentication -> Settings -> Authorized domains**: add `vansh-yadav-286.github.io` (`localhost` is there by default).
-
-**Apple requirements**: needs a paid Apple Developer account. Create a Services ID, enable Sign in with Apple, and add Firebase's `https://<PROJECT>.firebaseapp.com/__/auth/handler` as the return URL and `<PROJECT>.firebaseapp.com` as the domain. In Firebase's Apple provider, enter the Services ID, Team ID, Key ID and the private key (`.p8`) - these go in the Firebase console only, never in this repo. Apple only returns the user's name on the first sign-in.
-
-Until `firebaseConfig` is filled in, the buttons show "sign-in isn't set up yet".
