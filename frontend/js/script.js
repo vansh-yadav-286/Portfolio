@@ -18,27 +18,8 @@ const CONFIG = {
 };
 
 // =====================================================================
-// AUTH / MISC SETTINGS
+// MISC SETTINGS
 // =====================================================================
-
-// 1. Firebase (Google / Apple sign-in). Paste your own values from
-//    Firebase console -> Project settings -> Your apps -> Web app -> SDK setup.
-//    These client-side values are NOT secrets. Never put a service-account key here.
-//    Also add your site's domain (vansh-yadav-286.github.io) under
-//    Authentication -> Settings -> Authorized domains. See README for the full setup.
-const firebaseConfig = {
-  apiKey: "AIzaSyCnq_mCyT5rMWzOrq3kBx36-0lXEn1t7vg",
-  authDomain: "portfolio-cddf2.firebaseapp.com",
-  projectId: "portfolio-cddf2",
-  storageBucket: "portfolio-cddf2.firebasestorage.app",
-  messagingSenderId: "1064467501924",
-  appId: "1:1064467501924:web:2dc69938814427eed2a071",
-  measurementId: "G-LN436G7LNH"
-};
-const FIREBASE_SDK_VERSION = '10.14.1';
-// Apple needs an Apple Developer Services ID configured in Firebase first (see README).
-// Flip to true once Apple is enabled in the Firebase console.
-const APPLE_SIGNIN_ENABLED = false;
 
 const REQUEST_TIMEOUT_MS = 15000;
 
@@ -1330,16 +1311,17 @@ function initProjectModal() {
 
 
 // =====================================================================
-// AUTH (login / signup / logout)
-// Client-side demo only: everything is stored in this browser and the demo
-// credentials are readable in this file. It keeps casual visitors out of the
-// portfolio; it is NOT production-grade authentication.
-//   - Signups:     localStorage 'portfolioUsers' (salted SHA-256 password hash)
-//   - Session:     localStorage 'portfolioAuth' = { user, ts }
-// index.html reads the session in <head> so the right page shows before first paint.
+// AUTH (visitor login / signup / logout)
+// Accounts live in the FastAPI + PostgreSQL backend: POST /api/auth/register
+// and POST /api/auth/login. Passwords are sent to the backend over HTTPS only;
+// they are never stored or checked in the browser.
+// The browser keeps just a "logged in" flag, localStorage 'portfolioAuth' = { user, ts }.
+// index.html reads it in <head> so the right screen shows before first paint.
+// That flag only chooses which screen is drawn. It is not a security boundary:
+// the public portfolio content is served to everyone. The admin dashboard is
+// protected by the backend's JWT and admin-role check instead.
 // =====================================================================
 const AUTH_KEY = 'portfolioAuth';
-const USERS_KEY = 'portfolioUsers';
 
 function checkAuth() {
   try {
@@ -1348,150 +1330,56 @@ function checkAuth() {
   } catch (e) { return false; }
 }
 
-function readUsers() {
+function startSession(user) {
+  window.localStorage.setItem(AUTH_KEY, JSON.stringify({ user, ts: Date.now() }));
+}
+
+// Maps a backend failure to a message that is safe to show the visitor.
+function authErrorMessage(status, json) {
+  if (status === 429) return 'Too many attempts. Please wait a moment and try again.';
+  if (status === 422) return 'Please check the details you entered and try again.';
+  if (status < 500 && json && typeof json.message === 'string') return json.message;
+  return 'Something went wrong. Please try again.';
+}
+
+// POST /api/auth/login or /api/auth/register. Resolves with the envelope's data,
+// rejects with a message that is safe to show.
+async function postAuth(path, body) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const list = JSON.parse(window.localStorage.getItem(USERS_KEY) || '[]');
-    return Array.isArray(list) ? list : [];
-  } catch (e) { return []; }
-}
-
-function randomSalt() {
-  const bytes = new Uint8Array(16);
-  (window.crypto || window.msCrypto).getRandomValues(bytes);
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-// SHA-256 when available (https / localhost); tiny non-crypto fallback otherwise
-async function hashPassword(password, salt) {
-  const input = salt + ':' + password;
-  if (window.crypto && window.crypto.subtle) {
-    const buf = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
-    return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
-  }
-  let h = 2166136261;
-  for (let i = 0; i < input.length; i++) { h ^= input.charCodeAt(i); h = Math.imul(h, 16777619); }
-  return 'fnv' + (h >>> 0).toString(16);
-}
-
-function startSession(user, provider = 'password', extra = {}) {
-  window.localStorage.setItem(AUTH_KEY, JSON.stringify({ user, provider, ...extra, ts: Date.now() }));
-}
-
-function readSession() {
-  try { return JSON.parse(window.localStorage.getItem(AUTH_KEY) || 'null'); } catch (e) { return null; }
-}
-
-// ---- Firebase (Google / Apple) ----
-// The SDK is loaded from Google's CDN with dynamic import() so this stays a plain
-// static site. It is only fetched when Firebase is configured and needed.
-function isFirebaseConfigured() {
-  return !!firebaseConfig.apiKey && !/^YOUR_/.test(firebaseConfig.apiKey) && !/^YOUR_/.test(firebaseConfig.projectId);
-}
-
-let firebasePromise = null;
-function loadFirebase() {
-  if (!firebasePromise) {
-    const base = 'https://www.gstatic.com/firebasejs/' + FIREBASE_SDK_VERSION + '/';
-    firebasePromise = Promise.all([import(base + 'firebase-app.js'), import(base + 'firebase-auth.js')])
-      .then(([appMod, authMod]) => {
-        const app = appMod.getApps().length ? appMod.getApp() : appMod.initializeApp(firebaseConfig);
-        return { auth: authMod.getAuth(app), mod: authMod };
-      })
-      .catch((err) => { firebasePromise = null; throw err; });
-  }
-  return firebasePromise;
-}
-
-function firebaseErrorMessage(err, providerName) {
-  switch (err && err.code) {
-    case 'auth/popup-closed-by-user':
-    case 'auth/cancelled-popup-request':
-      return 'Sign-in was cancelled.';
-    case 'auth/popup-blocked':
-      return 'Your browser blocked the sign-in popup. Allow popups for this site and try again.';
-    case 'auth/account-exists-with-different-credential':
-      return 'An account with this email already exists using a different sign-in method.';
-    case 'auth/unauthorized-domain':
-      return 'This domain isn\u2019t authorized in Firebase. Add it under Authentication \u2192 Settings \u2192 Authorized domains.';
-    case 'auth/operation-not-allowed':
-      return providerName + ' sign-in isn\u2019t enabled in the Firebase console yet.';
-    case 'auth/network-request-failed':
-      return 'Network error. Check your connection and try again.';
-    case 'auth/too-many-requests':
-      return 'Too many attempts. Please wait a moment and try again.';
-    default:
-      console.error('[auth] ' + providerName + ' sign-in failed:', err);
-      return providerName + ' sign-in failed. Please try again.';
-  }
-}
-
-// only non-sensitive profile info goes in the session (no tokens)
-function startFirebaseSession(user, provider) {
-  const label = user.displayName || user.email || provider + ' user';
-  startSession(label, provider, { uid: user.uid, email: user.email || '', photoURL: user.photoURL || '' });
-}
-
-let authReloading = false; // stops the popup handler and the auth listener from both reloading
-
-async function signInWithProvider(providerName) {
-  const { auth, mod } = await loadFirebase();
-  const provider = providerName === 'Apple'
-    ? new mod.OAuthProvider('apple.com')
-    : new mod.GoogleAuthProvider();
-  if (providerName === 'Apple') { provider.addScope('email'); provider.addScope('name'); }
-  authReloading = true; // the listener below fires as soon as the popup succeeds
-  try {
-    const { user } = await mod.signInWithPopup(auth, provider);
-    startFirebaseSession(user, providerName.toLowerCase());
-  } catch (err) {
-    authReloading = false;
-    throw err;
-  }
-}
-
-// Firebase's auth listener keeps our portfolioAuth session in step with Firebase:
-//  - Firebase restored a Google/Apple user but there's no session (e.g. localStorage
-//    was cleared) -> log them straight in
-//  - Firebase has no user but we hold a Google/Apple session (signed out elsewhere /
-//    expired) -> drop the session and go back to Login
-// Username/password sessions never touch Firebase, so they are left alone. The first
-// paint is still decided synchronously from portfolioAuth (see the <head> gate), so
-// there is no flash and no arbitrary delay waiting on the network.
-function watchFirebaseSession() {
-  if (!isFirebaseConfigured()) return;
-  loadFirebase().then(({ auth, mod }) => {
-    mod.onAuthStateChanged(auth, (user) => {
-      const session = readSession();
-      const social = session && (session.provider === 'google' || session.provider === 'apple');
-      if (user && !session) {
-        const id = user.providerData[0] && user.providerData[0].providerId;
-        const provider = id === 'google.com' ? 'google' : id === 'apple.com' ? 'apple' : null;
-        if (!provider || authReloading) return;
-        authReloading = true;
-        try { startFirebaseSession(user, provider); window.location.reload(); } catch (e) { authReloading = false; }
-      } else if (!user && social) {
-        logout();
-      }
+    const res = await fetch(`${API_BASE_URL}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal
     });
-  }).catch((err) => console.error('[auth] could not check Firebase session:', err));
+    let json = null;
+    try { json = await res.json(); } catch (e) { /* non-JSON response */ }
+    if (!res.ok || !json || json.success === false) throw new Error(authErrorMessage(res.status, json));
+    return json.data;
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error('The server took too long to respond. Please try again.');
+    if (err instanceof TypeError) throw new Error('Could not reach the server. Check your connection and try again.');
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
-async function logout() {
-  const session = readSession();
+function setFormBusy(form, busy) {
+  const submit = $('button[type="submit"]', form);
+  if (submit) submit.disabled = busy;
+  form.setAttribute('aria-busy', String(busy));
+}
+
+function logout() {
   try { window.localStorage.removeItem(AUTH_KEY); } catch (e) { /* ignore */ }
-  // also sign out of Firebase for Google/Apple sessions (bounded wait so logout never hangs)
-  if (session && (session.provider === 'google' || session.provider === 'apple') && isFirebaseConfigured()) {
-    try {
-      const { auth, mod } = await loadFirebase();
-      await Promise.race([mod.signOut(auth), new Promise((r) => setTimeout(r, 2500))]);
-    } catch (e) { console.error('[auth] Firebase sign-out failed:', e); }
-  }
   // drop the hash + reload so the portfolio (and all its listeners) is torn down
   window.location.replace(window.location.pathname + window.location.search);
 }
 
 function initAuth() {
-  watchFirebaseSession();
   // logout buttons live inside the portfolio, so delegate
   document.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-logout]');
@@ -1520,7 +1408,7 @@ function initAuth() {
     loginError.textContent = '';
     notice.hidden = !msg;
     notice.textContent = msg || '';
-    $('input[name="username"]', loginForm).focus();
+    $('input[name="email"]', loginForm).focus();
   }
   function showSignup() {
     loginView.hidden = true;
@@ -1544,54 +1432,26 @@ function initAuth() {
     });
   });
 
-  // Google / Apple via Firebase. Preload the SDK so the popup opens right inside the click.
-  const socialBtns = $$('.auth__social-btn');
-  if (isFirebaseConfigured()) loadFirebase().catch(() => { /* surfaced on click */ });
-
-  socialBtns.forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const providerName = btn.dataset.provider;
-      const errorEl = loginView.hidden ? signupError : loginError;
-      errorEl.textContent = '';
-      if (providerName === 'Apple' && !APPLE_SIGNIN_ENABLED) {
-        errorEl.textContent = 'Apple sign-in isn\u2019t set up yet. Please use Google or your username and password.';
-        return;
-      }
-      if (!isFirebaseConfigured()) {
-        errorEl.textContent = providerName + ' sign-in isn\u2019t set up yet. Add your Firebase config in script.js.';
-        return;
-      }
-      const label = $('span', btn);
-      const original = label.textContent;
-      socialBtns.forEach((b) => { b.disabled = true; });
-      label.textContent = 'Connecting...';
-      try {
-        await signInWithProvider(providerName);
-        window.location.reload();
-      } catch (err) {
-        errorEl.textContent = firebaseErrorMessage(err, providerName);
-        label.textContent = original;
-        socialBtns.forEach((b) => { b.disabled = false; });
-      }
-    });
-  });
-
   loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const data = new FormData(loginForm);
-    const username = String(data.get('username') || '').trim();
+    const email = String(data.get('email') || '').trim().toLowerCase();
     const password = String(data.get('password') || '');
-    if (!username || !password) { loginError.textContent = 'Enter your username and password.'; return; }
+    if (!email || !password) { loginError.textContent = 'Enter your email and password.'; return; }
 
-    let user = null;
-    const key = username.toLowerCase();
-    const match = readUsers().find((u) => u.email === key || u.name.toLowerCase() === key);
-    if (match && await hashPassword(password, match.salt) === match.hash) user = match.name;
-    if (!user) { loginError.textContent = 'Incorrect username or password.'; return; }
-
+    loginError.textContent = '';
+    setFormBusy(loginForm, true);
     try {
-      startSession(user);
+      await postAuth('/api/auth/login', { email, password });
     } catch (err) {
+      setFormBusy(loginForm, false);
+      loginError.textContent = err.message;
+      return;
+    }
+    try {
+      startSession(email);
+    } catch (err) {
+      setFormBusy(loginForm, false);
       loginError.textContent = 'Your browser is blocking storage, so login can’t be saved.';
       return;
     }
@@ -1609,20 +1469,19 @@ function initAuth() {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { signupError.textContent = 'Please enter a valid email address.'; return; }
     if (password.length < 8) { signupError.textContent = 'Password must be at least 8 characters.'; return; }
 
-    const users = readUsers();
-    if (users.some((u) => u.email === email)) { signupError.textContent = 'An account with this email already exists.'; return; }
-
+    signupError.textContent = '';
+    setFormBusy(signupForm, true);
     try {
-      const salt = randomSalt();
-      users.push({ name, email, salt, hash: await hashPassword(password, salt) });
-      window.localStorage.setItem(USERS_KEY, JSON.stringify(users));
+      await postAuth('/api/auth/register', { name, email, password });
     } catch (err) {
-      signupError.textContent = 'Could not save your account (browser storage is blocked).';
+      setFormBusy(signupForm, false);
+      signupError.textContent = err.message;
       return;
     }
+    setFormBusy(signupForm, false);
     signupForm.reset();
     showLogin('Account created! Log in with your email and password.');
-    $('input[name="username"]', loginForm).value = email;
+    $('input[name="email"]', loginForm).value = email;
     $('input[name="password"]', loginForm).focus();
   });
 }

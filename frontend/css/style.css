@@ -806,17 +806,7 @@ html[data-auth="out"] body { background: #030816; }
 }
 .auth__submit:hover { transform: translateY(-1px); box-shadow: 0 10px 28px -8px rgba(255, 215, 94, .55); filter: brightness(1.04); }
 .auth__submit:active { transform: translateY(0); }
-.auth__divider { display: flex; align-items: center; gap: 14px; margin: 18px 0 16px; color: rgba(255, 255, 255, .8); font-size: .95rem; }
-.auth__divider::before, .auth__divider::after { content: ""; flex: 1; height: 1px; background: rgba(255, 255, 255, .22); }
-.auth__social { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.auth__social-btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
-  height: 54px; border-radius: 999px; cursor: pointer;
-  background: rgba(8, 20, 38, .55); border: 1px solid rgba(255, 255, 255, .28); color: #fff;
-  font-family: inherit; font-size: 1rem; font-weight: 500;
-  transition: background .2s, border-color .2s;
-}
-.auth__social-btn:hover { background: rgba(255, 255, 255, .12); border-color: rgba(255, 255, 255, .5); }
+.auth__submit:disabled { opacity: .7; cursor: progress; transform: none; }
 .auth__switch { margin: 22px 0 0; font-size: 1rem; }
 .auth__switch a { color: #ffd75e; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
 .auth__switch a:hover { color: #ffe9a3; }
@@ -830,4 +820,3 @@ html[data-auth="out"] body { background: #030816; }
 }
 
 /* Logout button in the portfolio navbar (icon only, label in title/aria-label) */
-.auth__social-btn:disabled { opacity: .7; cursor: progress; }
