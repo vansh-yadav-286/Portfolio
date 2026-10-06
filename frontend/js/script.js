@@ -10,7 +10,7 @@ const CONFIG = {
   githubCacheTTL: 60 * 60 * 1000, // 1hr cache, see initGithubStats
   roles: [
     'GenAI Engineer',
-    'AI Engineer',
+    'Full-Stack Engineer',
     'Prompt Engineer',
     'Python Developer',
     'Cloud & AI Enthusiast'
