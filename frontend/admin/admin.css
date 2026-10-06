@@ -19,6 +19,9 @@ body {
   color: var(--text);
   min-height: 100vh;
 }
+[hidden] {
+  display: none !important;
+}
 
 /* ---- login ---- */
 .admin-auth {
