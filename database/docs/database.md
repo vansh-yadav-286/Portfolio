@@ -16,7 +16,7 @@ See [`schemas/schema.sql`](../schemas/schema.sql) for the full column-level refe
 
 ## 1. Install PostgreSQL
 
-Use a local install, Docker, or any managed Postgres provider (Render's managed Postgres is what production uses). Create a database and user, e.g.:
+Use a local install, Docker, or any managed Postgres provider (Azure Database for PostgreSQL is what production uses). Create a database and user, e.g.:
 
 ```sql
 CREATE DATABASE portfolio_db;

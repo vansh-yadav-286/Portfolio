@@ -1,9 +1,3 @@
-databases:
-  - name: portfolio-db
-    plan: free
-    databaseName: portfolio
-    user: portfolio
-
 services:
   - type: web
     name: portfolio-api
@@ -15,9 +9,7 @@ services:
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
-        fromDatabase:
-          name: portfolio-db
-          property: connectionString
+        sync: false
       - key: SECRET_KEY
         sync: false
       - key: ALGORITHM

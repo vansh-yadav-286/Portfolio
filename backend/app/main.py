@@ -11,7 +11,7 @@ from slowapi.errors import RateLimitExceeded
 from app.core.config import settings
 from app.core.rate_limit import limiter
 from app.database.database import SessionLocal, check_database_connection
-from app.routes import analytics, auth, certificates, contacts, hackathons, projects
+from app.routes import analytics, auth, certificates, contacts, experiences, hackathons, projects
 from app.services.auth_service import ensure_admin_seeded
 from app.utils.helpers import success_response
 
@@ -86,6 +86,7 @@ app.include_router(auth.router)
 app.include_router(projects.router)
 app.include_router(certificates.router)
 app.include_router(hackathons.router)
+app.include_router(experiences.router)
 app.include_router(contacts.router)
 app.include_router(analytics.router)
 

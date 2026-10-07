@@ -39,4 +39,18 @@ BEGIN
     ('Prompt Engineering', 'IBM', 'assets/logos/Ibm Logo.jpg', 'certificates/IBM Prompt Engineering Certificate.pdf'),
     ('Python (Basic) - HackerRank', 'HackerRank', 'assets/logos/HackerRank Logo.jpg', 'certificates/python_basic certificate.pdf');
   END IF;
+
+  -- Year-only dates (2026) are stored as NULL: the column is a full DATE, and inventing a day is inaccurate.
+  IF NOT EXISTS (SELECT 1 FROM experiences) THEN
+    INSERT INTO experiences (title, organization, experience_type, start_date, end_date, is_current, description, link_url, display_order) VALUES
+    ('Full Stack Web Development Intern', 'Zeravia', 'Internship', DATE '2026-08-05', NULL, TRUE,
+     'Currently working as a Full Stack Web Development Intern at Zeravia, gaining hands-on experience in building and developing modern web applications. Zeravia is an Official Learning Partner of Mood Indigo, IIT Bombay.',
+     'https://www.linkedin.com/company/mood-indigo/', 1),
+    ('LPU NSS — Aahvaan Unit', 'Lovely Professional University', 'Community Service', NULL, NULL, TRUE,
+     'Actively involved in the National Service Scheme (NSS) at Lovely Professional University as a member of the Aahvaan unit, contributing to community service and student-led activities.',
+     NULL, 2),
+    ('Selected for Expo 2026', 'Lovely Professional University', 'Showcase', NULL, NULL, FALSE,
+     'Selected to showcase our work at Expo 2026, organized by the School of Computer Science and Engineering at Lovely Professional University.',
+     NULL, 3);
+  END IF;
 END $$;

@@ -37,6 +37,7 @@
       <button type="button" class="admin-nav__link" data-view="projects">Projects</button>
       <button type="button" class="admin-nav__link" data-view="certificates">Certificates</button>
       <button type="button" class="admin-nav__link" data-view="hackathons">Workshop &amp; Hackathons</button>
+      <button type="button" class="admin-nav__link" data-view="experience">Experience</button>
       <button type="button" class="admin-nav__link" data-view="messages">Contact Messages</button>
       <button type="button" class="admin-nav__link" data-view="analytics">Analytics</button>
     </nav>
@@ -82,6 +83,18 @@
       </div>
       <div class="admin-table-wrap"><table class="admin-table" id="hackathons-table">
         <thead><tr><th>Title</th><th>Type</th><th>Organizer</th><th>Visible</th><th>Order</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </section>
+
+    <!-- Experience -->
+    <section data-view-panel="experience" class="admin-view" hidden>
+      <div class="admin-view__header">
+        <h2>Experience</h2>
+        <button type="button" class="admin-btn admin-btn--primary" id="experience-new-btn">+ New Experience</button>
+      </div>
+      <div class="admin-table-wrap"><table class="admin-table" id="experience-table">
+        <thead><tr><th>Title</th><th>Organization</th><th>Type</th><th>Current</th><th>Order</th><th></th></tr></thead>
         <tbody></tbody>
       </table></div>
     </section>

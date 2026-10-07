@@ -274,11 +274,11 @@ GitHub Pages                       Render
                                    └───────────────┬───────────────┘
                                                     │
                                                     ▼
-                                          PostgreSQL (managed on Render)
+                                          Azure Database for PostgreSQL
                                           schema + migrations in database/
 ```
 
-Production flow: **GitHub Pages → HTML/CSS/JavaScript (`fetch()`) → FastAPI on Render → SQLAlchemy (psycopg) → PostgreSQL on Render.** Nothing else is part of the production stack.
+Production flow: **GitHub Pages → HTML/CSS/JavaScript (`fetch()`) → FastAPI on Render → SQLAlchemy (psycopg) → Azure Database for PostgreSQL.** Nothing else is part of the production stack.
 
 ### 3. Frontend (`frontend/`)
 
@@ -370,7 +370,7 @@ ADMIN_PASSWORD=change_this_password
 ```
 Never commit a real `.env`. The admin account is created automatically on backend startup from `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
 
-`FRONTEND_URL` takes a comma-separated list of allowed origins, for example `https://<your-user>.github.io,http://localhost:5500`. CORS allows only these origins. On Render, `DATABASE_URL` is injected from the attached PostgreSQL instance; set `SECRET_KEY`, `FRONTEND_URL`, `ADMIN_EMAIL` and `ADMIN_PASSWORD` in the Render dashboard. Never put their values in this repo.
+`FRONTEND_URL` takes a comma-separated list of allowed origins, for example `https://<your-user>.github.io,http://localhost:5500`. CORS allows only these origins. On Render, set `DATABASE_URL` (pointing at Azure Database for PostgreSQL), `SECRET_KEY`, `FRONTEND_URL`, `ADMIN_EMAIL` and `ADMIN_PASSWORD` in the Render dashboard. Never put their values in this repo.
 
 ### 8. Authentication
 
@@ -386,7 +386,7 @@ FastAPI + OAuth2PasswordBearer + JWT (HS256) + bcrypt password hashing. `POST /a
 cd backend
 pytest
 ```
-20 tests covering registration, login (valid/invalid), protected-route access, project CRUD, certificate CRUD, contact form submission/validation, and admin-only authorization checks. Tests run against a throwaway SQLite database, independent of your dev Postgres instance.
+20 tests covering registration, login (valid/invalid), protected-route access, project CRUD, certificate CRUD, contact form submission/validation, and admin-only authorization checks. Tests run against a throwaway SQLite database, independent of your dev Azure Postgres instance.
 
 ### 11. Deployment
 
@@ -397,9 +397,9 @@ pytest
 buildCommand: pip install -r backend/requirements.txt && cd database && alembic upgrade head
 startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
 ```
-Set `SECRET_KEY`, `FRONTEND_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` in the Render dashboard; `DATABASE_URL` is injected automatically from the attached managed Postgres instance. Full steps in [`backend/README.md`](backend/README.md).
+Set `DATABASE_URL` (your Azure Database for PostgreSQL connection string), `SECRET_KEY`, `FRONTEND_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` in the Render dashboard — none of these are provisioned or injected by the blueprint. Full steps in [`backend/README.md`](backend/README.md).
 
-After deploying, update `API_BASE_URL` in `frontend/js/config.js` to the Render URL. Render's health check uses `GET /health`, which runs `SELECT 1` against PostgreSQL and returns 503 if the database is unreachable.
+After deploying, update `API_BASE_URL` in `frontend/js/config.js` to the Render URL. Render's health check uses `GET /health`, which runs `SELECT 1` against Azure Database for PostgreSQL and returns 503 if the database is unreachable.
 
 ### 12. Security
 

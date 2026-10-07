@@ -42,6 +42,22 @@ CREATE TABLE certificates (
     updated_at      TIMESTAMPTZ   NOT NULL DEFAULT now()
 );
 
+CREATE TABLE experiences (
+    id              SERIAL PRIMARY KEY,
+    title           VARCHAR(200)  NOT NULL,
+    organization    VARCHAR(200)  NOT NULL,
+    experience_type VARCHAR(100)  NOT NULL,
+    start_date      DATE,
+    end_date        DATE,
+    is_current      BOOLEAN       NOT NULL DEFAULT FALSE,
+    description     TEXT          NOT NULL,
+    link_url        VARCHAR(500),
+    display_order   INTEGER       NOT NULL DEFAULT 0,
+    created_at      TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ   NOT NULL DEFAULT now()
+);
+CREATE INDEX ix_experiences_display_order ON experiences (display_order);
+
 CREATE TABLE contact_messages (
     id              SERIAL PRIMARY KEY,
     name            VARCHAR(120)  NOT NULL,

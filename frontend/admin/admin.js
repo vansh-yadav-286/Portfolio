@@ -131,7 +131,7 @@ function initNav() {
 
 function loadView(view) {
   $$('[data-view-panel]').forEach((panel) => { panel.hidden = panel.dataset.viewPanel !== view; });
-  const loaders = { overview: loadOverview, projects: loadProjects, certificates: loadCertificates, hackathons: loadHackathons, messages: loadMessages, analytics: loadAnalytics };
+  const loaders = { overview: loadOverview, projects: loadProjects, certificates: loadCertificates, hackathons: loadHackathons, experience: loadExperiences, messages: loadMessages, analytics: loadAnalytics };
   (loaders[view] || (() => {}))().catch((err) => showToast(err.message));
 }
 
@@ -556,6 +556,138 @@ function initHackathonCreate() {
   });
 }
 
+// ---- experience ----
+
+const EXPERIENCE_FIELDS = [
+  { name: 'title', label: 'Title', required: true },
+  { name: 'organization', label: 'Organization', required: true },
+  { name: 'experience_type', label: 'Type (e.g. Internship, Community Service)', required: true },
+  { name: 'start_date', label: 'Start Date', type: 'date' },
+  { name: 'end_date', label: 'End Date', type: 'date' },
+  { name: 'is_current', label: 'Current / Present', type: 'checkbox' },
+  { name: 'description', label: 'Description', type: 'textarea', required: true },
+  { name: 'link_url', label: 'Link URL (optional)' },
+  { name: 'display_order', label: 'Display order (lower shows first)', type: 'number' }
+];
+
+let experienceItems = [];
+
+// Turns the modal's values into the API payload, or throws a message for the form.
+function buildExperiencePayload(values) {
+  const text = (v) => { const t = String(v ?? '').trim(); return t === '' ? null : t; };
+  const required = (name, label, max) => {
+    const value = text(values[name]);
+    if (!value) throw new Error(`${label} is required.`);
+    if (value.length > max) throw new Error(`${label} must be ${max} characters or fewer.`);
+    return value;
+  };
+  const dateOrNull = (name, label) => {
+    const value = text(values[name]);
+    if (value && !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error(`${label} must be a valid date.`);
+    return value;
+  };
+
+  const title = required('title', 'Title', 200);
+  const organization = required('organization', 'Organization', 200);
+  const experienceType = required('experience_type', 'Type', 100);
+  const description = required('description', 'Description', 2000);
+
+  const startDate = dateOrNull('start_date', 'Start date');
+  const endDate = dateOrNull('end_date', 'End date');
+  if (startDate && endDate && endDate < startDate) throw new Error('End date cannot be before the start date.');
+
+  const linkUrl = text(values.link_url);
+  if (linkUrl && !isAllowedUrl(linkUrl)) throw new Error('Link must start with https://, http://, or be a relative path.');
+
+  const order = Number(values.display_order === '' || values.display_order == null ? 0 : values.display_order);
+  if (!Number.isInteger(order) || order < 0 || order > 100000) throw new Error('Display order must be a whole number from 0 to 100000.');
+
+  return {
+    title,
+    organization,
+    experience_type: experienceType,
+    start_date: startDate,
+    end_date: endDate,
+    is_current: !!values.is_current,
+    description,
+    link_url: linkUrl,
+    display_order: order
+  };
+}
+
+// Converts an API item into modal values: nulls become empty inputs so no value is lost or shown as "null".
+function experienceFormValues(item) {
+  return {
+    ...item,
+    start_date: item.start_date || '',
+    end_date: item.end_date || '',
+    link_url: item.link_url || '',
+    display_order: item.display_order ?? 0
+  };
+}
+
+async function loadExperiences() {
+  const tbody = $('#experience-table tbody');
+  tbody.innerHTML = '<tr><td colspan="6" style="color:var(--muted)">Loading…</td></tr>';
+  let items;
+  try {
+    items = await apiFetch('/api/experiences');
+  } catch (err) {
+    tbody.innerHTML = '';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td colspan="6" class="admin-error">${escapeHtml(err.message)}</td>`;
+    tbody.appendChild(tr);
+    throw err;
+  }
+  experienceItems = items;
+  tbody.innerHTML = '';
+  if (items.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="color:var(--muted)">No experience entries yet.</td></tr>';
+    return;
+  }
+
+  items.forEach((item) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${escapeHtml(item.title)}</td>
+      <td>${escapeHtml(item.organization)}</td>
+      <td>${escapeHtml(item.experience_type)}</td>
+      <td>${item.is_current ? 'Yes' : 'No'}</td>
+      <td>${item.display_order}</td>
+      <td class="row-actions">
+        <button type="button" class="admin-btn" data-edit="${item.id}">Edit</button>
+        <button type="button" class="admin-btn admin-btn--danger" data-delete="${item.id}">Delete</button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll('[data-edit]').forEach((btn) => btn.addEventListener('click', () => {
+    const item = items.find((i) => String(i.id) === btn.dataset.edit);
+    openModal('Edit Experience', EXPERIENCE_FIELDS, experienceFormValues(item));
+    modalSubmitHandler = async (values) => {
+      await apiFetch(`/api/experiences/${item.id}`, { method: 'PUT', body: buildExperiencePayload(values) });
+      showToast('Experience updated');
+      loadExperiences();
+    };
+  }));
+
+  tbody.querySelectorAll('[data-delete]').forEach((btn) => btn.addEventListener('click', () => {
+    if (!confirm('Delete this experience entry? This cannot be undone.')) return;
+    runListAction(() => apiFetch(`/api/experiences/${btn.dataset.delete}`, { method: 'DELETE' }), 'Experience deleted', loadExperiences);
+  }));
+}
+
+function initExperienceCreate() {
+  $('#experience-new-btn').addEventListener('click', () => {
+    openModal('New Experience', EXPERIENCE_FIELDS, { is_current: false, display_order: experienceItems.length });
+    modalSubmitHandler = async (values) => {
+      await apiFetch('/api/experiences', { method: 'POST', body: buildExperiencePayload(values) });
+      showToast('Experience created');
+      loadExperiences();
+    };
+  });
+}
+
 // ---- contact messages ----
 
 async function loadMessages() {
@@ -603,5 +735,6 @@ document.addEventListener('DOMContentLoaded', () => {
   initProjectCreate();
   initCertificateCreate();
   initHackathonCreate();
+  initExperienceCreate();
   initAuth();
 });

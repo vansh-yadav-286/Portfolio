@@ -1,5 +1,6 @@
 from app.models.certificate import Certificate
 from app.models.contact import ContactMessage, ContactStatus
+from app.models.experience import Experience
 from app.models.hackathon import Hackathon
 from app.models.project import Project
 from app.models.user import User, UserRole
@@ -11,6 +12,7 @@ __all__ = [
     "Project",
     "Certificate",
     "Hackathon",
+    "Experience",
     "ContactMessage",
     "ContactStatus",
     "Visitor",

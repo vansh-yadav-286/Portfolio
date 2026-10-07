@@ -110,8 +110,8 @@ This service is deployed on **Render**. Do not use Railway. See [`../render.yaml
 2. In Render, create a new Blueprint from the repo's `render.yaml`.
 3. Build command: `pip install -r backend/requirements.txt && cd database && alembic upgrade head`
 4. Start command: `cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-5. Attach the managed PostgreSQL instance (the blueprint provisions one and injects `DATABASE_URL` automatically).
-6. Set the remaining environment variables in the Render dashboard (never commit them): `SECRET_KEY`, `ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `FRONTEND_URL` (your GitHub Pages origin, plus `http://localhost:5500` for local development, comma-separated), `ADMIN_EMAIL`, `ADMIN_PASSWORD`.
+5. Set the environment variables in the Render dashboard (never commit them): `DATABASE_URL` (your Azure Database for PostgreSQL connection string, e.g. `postgresql+psycopg://user:password@<server>.postgres.database.azure.com:5432/<db>?sslmode=require`), `SECRET_KEY`, `ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `FRONTEND_URL` (your GitHub Pages origin, plus `http://localhost:5500` for local development, comma-separated), `ADMIN_EMAIL`, `ADMIN_PASSWORD`. None of these are provisioned or injected automatically — the blueprint no longer attaches a Render-managed database.
+6. In Azure, allow the Render outbound IP(s) through the PostgreSQL server's firewall rules rather than opening the database to all addresses.
 
 Render supplies `$PORT` at runtime; the start command binds to it rather than a hardcoded port.
 
