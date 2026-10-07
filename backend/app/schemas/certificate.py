@@ -13,6 +13,7 @@ class CertificateBase(BaseModel):
     credential_url: SafeUrl = None
     image_url: SafeUrl = None
     pdf_url: SafeUrl = None
+    display_order: int = Field(default=0, ge=0, le=100000)
 
 
 class CertificateCreate(CertificateBase):
@@ -27,6 +28,7 @@ class CertificateUpdate(BaseModel):
     credential_url: SafeUrl = None
     image_url: SafeUrl = None
     pdf_url: SafeUrl = None
+    display_order: int | None = Field(default=None, ge=0, le=100000)
 
 
 class CertificateOut(CertificateBase):

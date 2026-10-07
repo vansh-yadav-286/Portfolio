@@ -272,11 +272,14 @@ const PROJECT_FIELDS = [
   { name: 'featured', label: 'Featured', type: 'checkbox' }
 ];
 
+let projectItems = [];
+
 async function loadProjects() {
   const projects = await apiFetch('/api/projects', { auth: false });
+  projectItems = projects;
   const tbody = $('#projects-table tbody');
   tbody.innerHTML = '';
-  projects.forEach((project) => {
+  projects.forEach((project, index) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${escapeHtml(project.title)}</td>
@@ -284,11 +287,21 @@ async function loadProjects() {
       <td class="truncate">${escapeHtml(project.technologies || '')}</td>
       <td>${project.featured ? 'Yes' : 'No'}</td>
       <td class="row-actions">
+        <button type="button" class="admin-btn" data-up="${index}" ${index === 0 ? 'disabled' : ''} aria-label="Move up">↑</button>
+        <button type="button" class="admin-btn" data-down="${index}" ${index === projects.length - 1 ? 'disabled' : ''} aria-label="Move down">↓</button>
+      </td>
+      <td class="row-actions">
         <button type="button" class="admin-btn" data-edit="${project.id}">Edit</button>
         <button type="button" class="admin-btn admin-btn--danger" data-delete="${project.id}">Delete</button>
       </td>`;
     tbody.appendChild(tr);
   });
+
+  tbody.querySelectorAll('[data-up], [data-down]').forEach((btn) => btn.addEventListener('click', () => {
+    const from = Number(btn.dataset.up ?? btn.dataset.down);
+    const to = btn.dataset.up !== undefined ? from - 1 : from + 1;
+    runListAction(() => moveProject(from, to), 'Order updated', loadProjects);
+  }));
 
   tbody.querySelectorAll('[data-edit]').forEach((btn) => btn.addEventListener('click', () => {
     const project = projects.find((p) => String(p.id) === btn.dataset.edit);
@@ -305,11 +318,25 @@ async function loadProjects() {
   }));
 }
 
+// Swaps one item with its neighbour, then renumbers display_order so the order is always distinct.
+async function moveProject(from, to) {
+  if (to < 0 || to >= projectItems.length) return;
+  const reordered = projectItems.slice();
+  const [moved] = reordered.splice(from, 1);
+  reordered.splice(to, 0, moved);
+  const changes = reordered
+    .map((item, position) => ({ item, position }))
+    .filter(({ item, position }) => item.display_order !== position);
+  for (const { item, position } of changes) {
+    await apiFetch(`/api/projects/${item.id}`, { method: 'PUT', body: { display_order: position } });
+  }
+}
+
 function initProjectCreate() {
   $('#project-new-btn').addEventListener('click', () => {
     openModal('New Project', PROJECT_FIELDS, { technologies: '', featured: false });
     modalSubmitHandler = async (values) => {
-      await apiFetch('/api/projects', { method: 'POST', body: values });
+      await apiFetch('/api/projects', { method: 'POST', body: { ...values, display_order: projectItems.length } });
       showToast('Project created');
       loadProjects();
     };
@@ -328,22 +355,35 @@ const CERTIFICATE_FIELDS = [
   { name: 'pdf_url', label: 'PDF URL' }
 ];
 
+let certificateItems = [];
+
 async function loadCertificates() {
   const certificates = await apiFetch('/api/certificates', { auth: false });
+  certificateItems = certificates;
   const tbody = $('#certificates-table tbody');
   tbody.innerHTML = '';
-  certificates.forEach((cert) => {
+  certificates.forEach((cert, index) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${escapeHtml(cert.title)}</td>
       <td>${escapeHtml(cert.issuer)}</td>
       <td>${escapeHtml(cert.credential_id || '')}</td>
       <td class="row-actions">
+        <button type="button" class="admin-btn" data-up="${index}" ${index === 0 ? 'disabled' : ''} aria-label="Move up">↑</button>
+        <button type="button" class="admin-btn" data-down="${index}" ${index === certificates.length - 1 ? 'disabled' : ''} aria-label="Move down">↓</button>
+      </td>
+      <td class="row-actions">
         <button type="button" class="admin-btn" data-edit="${cert.id}">Edit</button>
         <button type="button" class="admin-btn admin-btn--danger" data-delete="${cert.id}">Delete</button>
       </td>`;
     tbody.appendChild(tr);
   });
+
+  tbody.querySelectorAll('[data-up], [data-down]').forEach((btn) => btn.addEventListener('click', () => {
+    const from = Number(btn.dataset.up ?? btn.dataset.down);
+    const to = btn.dataset.up !== undefined ? from - 1 : from + 1;
+    runListAction(() => moveCertificate(from, to), 'Order updated', loadCertificates);
+  }));
 
   tbody.querySelectorAll('[data-edit]').forEach((btn) => btn.addEventListener('click', () => {
     const cert = certificates.find((c) => String(c.id) === btn.dataset.edit);
@@ -361,12 +401,26 @@ async function loadCertificates() {
   }));
 }
 
+// Swaps one item with its neighbour, then renumbers display_order so the order is always distinct.
+async function moveCertificate(from, to) {
+  if (to < 0 || to >= certificateItems.length) return;
+  const reordered = certificateItems.slice();
+  const [moved] = reordered.splice(from, 1);
+  reordered.splice(to, 0, moved);
+  const changes = reordered
+    .map((item, position) => ({ item, position }))
+    .filter(({ item, position }) => item.display_order !== position);
+  for (const { item, position } of changes) {
+    await apiFetch(`/api/certificates/${item.id}`, { method: 'PUT', body: { display_order: position } });
+  }
+}
+
 function initCertificateCreate() {
   $('#certificate-new-btn').addEventListener('click', () => {
     openModal('New Certificate', CERTIFICATE_FIELDS, {});
     modalSubmitHandler = async (values) => {
       if (!values.issue_date) values.issue_date = null;
-      await apiFetch('/api/certificates', { method: 'POST', body: values });
+      await apiFetch('/api/certificates', { method: 'POST', body: { ...values, display_order: certificateItems.length } });
       showToast('Certificate created');
       loadCertificates();
     };

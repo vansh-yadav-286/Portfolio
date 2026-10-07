@@ -14,6 +14,7 @@ class ProjectBase(BaseModel):
     live_url: SafeUrl = None
     category: str | None = Field(default=None, max_length=120)
     featured: bool = False
+    display_order: int = Field(default=0, ge=0, le=100000)
 
 
 class ProjectCreate(ProjectBase):
@@ -29,6 +30,7 @@ class ProjectUpdate(BaseModel):
     live_url: SafeUrl = None
     category: str | None = Field(default=None, max_length=120)
     featured: bool | None = None
+    display_order: int | None = Field(default=None, ge=0, le=100000)
 
 
 class ProjectOut(ProjectBase):

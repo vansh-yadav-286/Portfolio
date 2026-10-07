@@ -9,7 +9,7 @@ def list_projects(db: Session, featured_only: bool = False) -> list[Project]:
     query = db.query(Project)
     if featured_only:
         query = query.filter(Project.featured.is_(True))
-    return query.order_by(Project.created_at.desc()).all()
+    return query.order_by(Project.display_order.asc(), Project.id.asc()).all()
 
 
 def get_project(db: Session, project_id: int) -> Project:

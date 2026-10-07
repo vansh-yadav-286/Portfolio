@@ -6,7 +6,7 @@ from app.utils.helpers import api_error
 
 
 def list_certificates(db: Session) -> list[Certificate]:
-    return db.query(Certificate).order_by(Certificate.created_at.desc()).all()
+    return db.query(Certificate).order_by(Certificate.display_order.asc(), Certificate.id.asc()).all()
 
 
 def get_certificate(db: Session, certificate_id: int) -> Certificate:
