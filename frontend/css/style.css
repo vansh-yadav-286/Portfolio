@@ -382,14 +382,6 @@ html.cursor-hover #cursor-ring { width: 52px; height: 52px; margin: -26px 0 0 -2
 @keyframes mesh-drift { from { transform: translate(0, 0) scale(1); } to { transform: translate(-3%, 2%) scale(1.08); } }
 #neural-canvas { position: absolute; inset: 0; z-index: 0; opacity: .55; }
 .hero__inner { position: relative; z-index: 1; max-width: 1220px; margin-inline: auto; padding-inline: clamp(1.25rem, 5vw, 3rem); width: 100%; }
-.hero__eyebrow {
-  display: inline-flex; align-items: center; gap: .5rem;
-  font-family: var(--font-mono); font-size: .8rem; color: var(--text-lo);
-  border: 1px solid var(--border); padding: .4rem .9rem; border-radius: 999px;
-  margin-bottom: 2rem;
-}
-.hero__eyebrow-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 8px var(--ok); }
-
 .hero__name {
   font-size: clamp(3.2rem, 11vw, 7.5rem); line-height: .95;
   color: var(--text-hi);
@@ -699,7 +691,6 @@ html.cursor-hover #cursor-ring { width: 52px; height: 52px; margin: -26px 0 0 -2
 .field input, .field textarea { font-family: var(--font-body); font-size: .95rem; color: var(--text-hi); background: var(--bg-surface-2); border: 1px solid var(--border); border-radius: 10px; padding: .7rem .9rem; outline: none; transition: border-color .2s; resize: vertical; }
 .field input:focus, .field textarea:focus { border-color: var(--ion); }
 .field input:invalid:not(:placeholder-shown), .field textarea:invalid:not(:placeholder-shown) { border-color: var(--magenta); }
-.field__hint { font-family: var(--font-mono); font-size: .72rem; color: var(--text-faint); text-align: center; }
 
 /* Footer */
 footer { border-top: 1px solid var(--border); padding-block: 3rem; margin-top: 4rem; }
@@ -859,5 +850,3 @@ html[data-auth="out"] body { background: #030816; }
   .auth__card { padding: 32px 22px 28px; border-radius: 24px; }
   .auth__field, .auth__submit { height: 54px; }
 }
-
-/* Logout button in the portfolio navbar (icon only, label in title/aria-label) */
