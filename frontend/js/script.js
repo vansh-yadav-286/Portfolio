@@ -477,51 +477,6 @@ async function initRoleTypewriter() {
   }
 }
 
-// fake terminal in the About section. not a real shell obviously,
-// just pattern matching on a handful of commands
-function initTerminal() {
-  const input = $('#terminal-input');
-  const output = $('#terminal-output');
-  if (!input || !output) return;
-
-  const commands = {
-    help: () => 'Available: whoami, skills, projects, education, hackathons, contact, clear, help',
-    whoami: () => `${CONFIG.name} — GenAI Engineer & B.Tech CSE (Generative AI) student at Lovely Professional University.`,
-    skills: () => 'Python · JavaScript · C · Generative AI · Prompt Engineering · LLMs · AI Agents · Azure · OCI',
-    projects: () => 'Innovative AI · AI Concierge for ET · SplitterEase · Railway Reservation System · Laptop Recovery System — see the Projects section.',
-    education: () => 'B.Tech CSE, Generative AI specialization — Lovely Professional University, 2025–2029.',
-    hackathons: () => 'ET AI Hackathon · E-Cell IIT Roorkee · ByteXL GenAI Workshop.',
-    contact: () => `Email ${CONFIG.email} — full links are in the Contact section below.`,
-    clear: () => { output.innerHTML = ''; return null; }
-  };
-
-  function print(text, cls) {
-    const p = document.createElement('p');
-    if (cls) p.className = cls;
-    p.textContent = text;
-    output.appendChild(p);
-  }
-
-  input.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter') return;
-    const raw = input.value.trim();
-    if (!raw) return;
-    print(raw, 't-cmd');
-    const lower = raw.toLowerCase();
-    if (lower.startsWith('sudo')) {
-      // little easter egg, someone always tries sudo
-      print('Nice try — guest is not in the sudoers file. This incident will be reported to nobody.', 't-accent');
-    } else if (commands[lower]) {
-      const result = commands[lower]();
-      if (result) print(result, 't-accent');
-    } else {
-      print(`command not found: ${raw} — type "help"`, 't-accent');
-    }
-    input.value = '';
-    output.scrollTop = output.scrollHeight;
-  });
-}
-
 // live-ish github stats. hits the unauthenticated API so it's rate
 // limited to 60/hr - caching keeps it from getting hammered on repeat
 // visits or when I'm demoing this on the same wifi as other people
@@ -1618,7 +1573,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const modules = [
     initCursor, initScrollChrome, initClock, initNav, initScrollReveal,
     initOrbitPause, initTilt, initMagnetic, initParallax, initRipple,
-    initNeuralCanvas, initBootRain, initRoleTypewriter, initTerminal,
+    initNeuralCanvas, initBootRain, initRoleTypewriter,
     initHackathons,
     initGithubStats, initCertificates, initProjects, initContact, initCommandPalette, initAIWidget,
     initTheme, initMusicToggle, initDevMode, initAnalytics
