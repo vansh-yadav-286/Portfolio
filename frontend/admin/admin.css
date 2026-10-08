@@ -1,13 +1,17 @@
 :root {
-  --bg: #060814;
-  --panel: #0d1024;
-  --panel-2: #131736;
-  --border: rgba(255, 255, 255, 0.1);
-  --text: #e6e8f5;
-  --muted: #9aa0c3;
-  --accent: #4cc9f0;
+  --bg: #0A0503;
+  --panel: #1A0B06;
+  --panel-2: #24130B;
+  --border: rgba(255, 138, 61, 0.16);
+  --text: #F3ECE2;
+  --muted: #B9A28A;
+  --accent: #FF6A00;
   --danger: #ff5c7a;
   --success: #4ade80;
+  --gold: #947328;
+  --gold-2: #DFBF72;
+  --ember: #E85D04;
+  --rust: #C2410C;
   font-family: 'Sora', system-ui, -apple-system, sans-serif;
 }
 
@@ -104,8 +108,14 @@ body {
 .admin-sidebar {
   width: 220px;
   flex-shrink: 0;
-  background: var(--panel);
-  border-right: 1px solid var(--border);
+  background-image:
+    linear-gradient(180deg, rgba(10, 5, 3, 0.88), rgba(10, 5, 3, 0.94)),
+    url("../assets/images/admin-sidebar-flames.jpg");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  border-right: 1px solid rgba(255, 138, 61, 0.2);
+  box-shadow: inset -36px 0 60px -48px rgba(255, 106, 0, 0.35);
   padding: 20px 16px;
   display: flex;
   flex-direction: column;
@@ -117,16 +127,65 @@ body {
   text-align: left;
   background: none;
   border: none;
+  border-left: 3px solid transparent;
   color: var(--muted);
-  padding: 10px 12px;
+  padding: 10px 12px 10px 9px;
   border-radius: 8px;
   cursor: pointer;
   font: inherit;
 }
-.admin-nav__link:hover { background: var(--panel-2); color: var(--text); }
-.admin-nav__link.is-active { background: var(--panel-2); color: var(--accent); font-weight: 600; }
+.admin-nav__link:hover { background: rgba(255, 106, 0, 0.1); color: var(--text); }
+.admin-nav__link.is-active { background: rgba(148, 115, 40, 0.2); border-left-color: var(--gold); color: var(--gold-2); font-weight: 600; }
 
-.admin-main { flex: 1; padding: 28px 32px; overflow-x: auto; }
+.admin-sidebar .admin-btn--ghost { border-color: rgba(255, 138, 61, 0.3); color: var(--gold-2); }
+.admin-sidebar .admin-btn--ghost:hover { background: rgba(255, 106, 0, 0.14); border-color: var(--gold); color: var(--text); }
+
+.admin-main {
+  flex: 1;
+  padding: 28px 32px;
+  overflow-x: auto;
+  background-color: var(--bg);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  transition: background-image .25s ease;
+}
+
+/* Overview — Theme 11: bonfire silhouettes */
+.admin-main:has(.admin-view[data-view-panel="overview"]:not([hidden])) {
+  background-image: linear-gradient(180deg, rgba(10, 5, 3, 0.58), rgba(10, 5, 3, 0.85)), url("../assets/images/admin-overview-bonfire.jpg");
+  background-position: center 30%;
+}
+/* Certificates — Theme 8: burning parchment */
+.admin-main:has(.admin-view[data-view-panel="certificates"]:not([hidden])) {
+  background-image: linear-gradient(rgba(10, 5, 3, 0.6), rgba(10, 5, 3, 0.78)), url("../assets/images/admin-certificates-parchment.jpg");
+}
+/* Experience — Theme 9: forest campfire */
+.admin-main:has(.admin-view[data-view-panel="experience"]:not([hidden])) {
+  background-image: linear-gradient(rgba(6, 4, 2, 0.6), rgba(6, 4, 2, 0.88)), url("../assets/images/admin-experience-campfire.jpg");
+  background-position: center 70%;
+}
+/* Projects — fire-texture variant, warm top glow */
+.admin-main:has(.admin-view[data-view-panel="projects"]:not([hidden])) {
+  background-image: radial-gradient(ellipse at top right, rgba(255, 106, 0, 0.14), transparent 55%), linear-gradient(rgba(10, 5, 3, 0.86), rgba(10, 5, 3, 0.92)), url("../assets/images/admin-sidebar-flames.jpg");
+  background-position: center 20%;
+}
+/* Workshop & Hackathons — smokier, charcoal-leaning variant */
+.admin-main:has(.admin-view[data-view-panel="hackathons"]:not([hidden])) {
+  background-image: linear-gradient(rgba(18, 12, 9, 0.88), rgba(18, 12, 9, 0.93)), url("../assets/images/admin-sidebar-flames.jpg");
+  background-position: center 80%;
+}
+/* Contact Messages — darkest, most subtle */
+.admin-main:has(.admin-view[data-view-panel="messages"]:not([hidden])) {
+  background-image: linear-gradient(rgba(8, 4, 2, 0.93), rgba(8, 4, 2, 0.95)), url("../assets/images/admin-sidebar-flames.jpg");
+  background-position: center left;
+}
+/* Analytics — fire texture with a soft gold glow */
+.admin-main:has(.admin-view[data-view-panel="analytics"]:not([hidden])) {
+  background-image: radial-gradient(ellipse at 20% 10%, rgba(223, 191, 114, 0.1), transparent 50%), linear-gradient(rgba(10, 5, 3, 0.87), rgba(10, 5, 3, 0.92)), url("../assets/images/admin-sidebar-flames.jpg");
+  background-position: center right;
+}
+
 .admin-view__header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .admin-view h2 { margin-top: 0; }
 
@@ -150,7 +209,7 @@ body {
 .admin-table .row-actions button { padding: 6px 10px; font-size: 0.8rem; }
 
 .status-pill { padding: 2px 10px; border-radius: 999px; font-size: 0.75rem; display: inline-block; }
-.status-pill--unread { background: rgba(76, 201, 240, 0.15); color: var(--accent); }
+.status-pill--unread { background: rgba(255, 106, 0, 0.15); color: var(--accent); }
 .status-pill--read { background: rgba(255, 255, 255, 0.1); color: var(--muted); }
 .status-pill--replied { background: rgba(74, 222, 128, 0.15); color: var(--success); }
 .status-pill--archived { background: rgba(255, 92, 122, 0.1); color: var(--danger); }
