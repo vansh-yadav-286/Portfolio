@@ -12,8 +12,8 @@
   --glass-border: rgba(255, 255, 255, 0.09);
   --border: rgba(255, 255, 255, 0.09);
 
-  --ion: #4cc9f0;
-  --ion-dim: rgba(76, 201, 240, 0.14);
+  --ion: #DFBF72;
+  --ion-dim: rgba(223, 191, 114, 0.14);
   --magenta: #f72585;
   --magenta-dim: rgba(247, 37, 133, 0.14);
   --amber: #ffb627;
@@ -43,8 +43,8 @@
   --glass-border: rgba(10, 14, 30, 0.08);
   --border: rgba(10, 14, 30, 0.09);
 
-  --ion: #0a86a8;
-  --ion-dim: rgba(10, 134, 168, 0.1);
+  --ion: #DFBF72;
+  --ion-dim: rgba(223, 191, 114, 0.1);
   --magenta: #c81e75;
   --magenta-dim: rgba(200, 30, 117, 0.1);
   --amber: #a6690a;
