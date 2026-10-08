@@ -50,9 +50,10 @@ body {
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
 }
-.admin-auth__card h1 { margin: 0 0 8px; font-size: 1.4rem; }
-.admin-auth__subtitle { color: var(--muted); font-size: 0.9rem; margin: 0 0 20px; }
+.admin-auth__card h1 { margin: 0 0 8px; font-size: 1.4rem; color: #947328; }
+.admin-auth__subtitle { color: #DFBF72; font-size: 0.9rem; margin: 0 0 20px; }
 
+.admin-auth__card .admin-field span { color: #DFBF72; }
 .admin-auth__card .admin-field input {
   background: rgba(255, 255, 255, 0.06);
   border-color: rgba(212, 175, 55, 0.3);
