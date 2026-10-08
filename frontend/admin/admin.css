@@ -194,16 +194,17 @@ body {
 .admin-stat-card__value { font-size: 1.8rem; font-weight: 700; color: var(--accent); }
 .admin-stat-card__label { color: var(--muted); font-size: 0.85rem; margin-top: 4px; }
 
-.admin-table-wrap { overflow-x: auto; }
-.admin-table { width: 100%; border-collapse: collapse; background: var(--panel); border-radius: 12px; overflow: hidden; }
+.admin-table-wrap { overflow-x: auto; background: transparent; border-radius: 12px; }
+.admin-table { width: 100%; border-collapse: collapse; background: transparent; border-radius: 12px; overflow: hidden; }
 .admin-table th, .admin-table td {
   text-align: left;
   padding: 10px 14px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   font-size: 0.9rem;
   max-width: 320px;
+  background: transparent;
 }
-.admin-table th { color: var(--muted); font-weight: 600; background: var(--panel-2); }
+.admin-table th { color: var(--muted); font-weight: 600; background: transparent; }
 .admin-table td.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .admin-table .row-actions { display: flex; gap: 8px; }
 .admin-table .row-actions button { padding: 6px 10px; font-size: 0.8rem; }
