@@ -2,6 +2,7 @@ from app.models.certificate import Certificate
 from app.models.contact import ContactMessage, ContactStatus
 from app.models.experience import Experience
 from app.models.hackathon import Hackathon
+from app.models.oauth_login_code import OAuthLoginCode
 from app.models.project import Project
 from app.models.user import User, UserRole
 from app.models.visitor import Visitor
@@ -16,4 +17,5 @@ __all__ = [
     "ContactMessage",
     "ContactStatus",
     "Visitor",
+    "OAuthLoginCode",
 ]

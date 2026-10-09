@@ -1394,6 +1394,11 @@ function initProjectModal() {
 // protected by the backend's JWT and admin-role check instead.
 // =====================================================================
 const AUTH_KEY = 'portfolioAuth';
+// The JWT itself lives in sessionStorage (cleared when the tab closes, never
+// shared with other tabs) - same approach as the admin dashboard's token.
+// AUTH_KEY above only controls which screen is drawn (see the comment block
+// above); this token is what actually proves identity to the backend.
+const AUTH_TOKEN_KEY = 'portfolioAuthToken';
 
 function checkAuth() {
   try {
@@ -1404,6 +1409,40 @@ function checkAuth() {
 
 function startSession(user) {
   window.localStorage.setItem(AUTH_KEY, JSON.stringify({ user, ts: Date.now() }));
+}
+
+function getAuthToken() {
+  try { return window.sessionStorage.getItem(AUTH_TOKEN_KEY); } catch (e) { return null; }
+}
+
+function setAuthToken(token) {
+  try { window.sessionStorage.setItem(AUTH_TOKEN_KEY, token); } catch (e) { /* storage blocked */ }
+}
+
+function clearAuthToken() {
+  try { window.sessionStorage.removeItem(AUTH_TOKEN_KEY); } catch (e) { /* ignore */ }
+}
+
+// GET /api/auth/me with the given bearer token. Used to derive the signed-in
+// user's identity from a backend-verified token - never from a URL parameter.
+async function fetchAuthenticatedUser(token) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal
+    });
+    let json = null;
+    try { json = await res.json(); } catch (e) { /* non-JSON response */ }
+    if (!res.ok || !json || json.success === false) throw new Error('Could not verify your session. Please log in again.');
+    return json.data;
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error('The server took too long to respond. Please try again.');
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // Maps a backend failure to a message that is safe to show the visitor.
@@ -1447,6 +1486,7 @@ function setFormBusy(form, busy) {
 
 function logout() {
   try { window.localStorage.removeItem(AUTH_KEY); } catch (e) { /* ignore */ }
+  clearAuthToken();
   // drop the hash + reload so the portfolio (and all its listeners) is torn down
   window.location.replace(window.location.pathname + window.location.search);
 }
@@ -1493,6 +1533,55 @@ function initAuth() {
   $('#show-signup').addEventListener('click', (e) => { e.preventDefault(); showSignup(); });
   $('#show-login').addEventListener('click', (e) => { e.preventDefault(); showLogin(); });
 
+  // Google / GitHub: full-page redirect to the backend, which redirects to the
+  // provider's consent screen and back. Can't be a fetch() - the consent UI
+  // has to be shown to the user, not read by JS.
+  $$('[data-oauth-provider]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      btn.disabled = true;
+      const redirect = encodeURIComponent(window.location.origin + window.location.pathname);
+      window.location.href = `${API_BASE_URL}/api/auth/${btn.dataset.oauthProvider}/login?redirect=${redirect}`;
+    });
+  });
+
+  // Coming back from a backend OAuth redirect: ?oauth=success&code=<one-time
+  // code> on success, or ?oauth_error=<message> if it failed/was cancelled.
+  // The code is not a session by itself and carries no identity claim - it
+  // must be exchanged for a real, backend-issued JWT, and the signed-in
+  // user's identity comes from that token (via /api/auth/me), never from a
+  // URL parameter.
+  (async function handleOAuthRedirect() {
+    const params = new URLSearchParams(window.location.search);
+    const oauthError = params.get('oauth_error');
+    const code = params.get('code');
+    if (!params.has('oauth') && !oauthError) return;
+
+    // Strip the query before anything else runs, so the one-time code never
+    // sits in the address bar/history and isn't sent in the Referer header
+    // of the exchange request below.
+    window.history.replaceState({}, '', window.location.pathname + window.location.hash);
+
+    if (params.get('oauth') === 'success' && code) {
+      setFormBusy(loginForm, true);
+      try {
+        const tokenData = await postAuth('/api/auth/oauth/exchange', { code });
+        const me = await fetchAuthenticatedUser(tokenData.access_token);
+        setAuthToken(tokenData.access_token);
+        startSession(me.email);
+      } catch (err) {
+        setFormBusy(loginForm, false);
+        clearAuthToken();
+        showLogin();
+        loginError.textContent = err.message || 'Could not complete login. Please try again.';
+        return;
+      }
+      window.location.reload();
+    } else if (oauthError) {
+      showLogin();
+      loginError.textContent = oauthError;
+    }
+  })();
+
   // show/hide password (login + signup fields)
   $$('.auth__eye').forEach((eye) => {
     const input = $('input', eye.closest('.auth__field'));
@@ -1513,17 +1602,20 @@ function initAuth() {
 
     loginError.textContent = '';
     setFormBusy(loginForm, true);
+    let tokenData;
     try {
-      await postAuth('/api/auth/login', { email, password });
+      tokenData = await postAuth('/api/auth/login', { email, password });
     } catch (err) {
       setFormBusy(loginForm, false);
       loginError.textContent = err.message;
       return;
     }
     try {
+      setAuthToken(tokenData.access_token);
       startSession(email);
     } catch (err) {
       setFormBusy(loginForm, false);
+      clearAuthToken();
       loginError.textContent = 'Your browser is blocking storage, so login can’t be saved.';
       return;
     }
