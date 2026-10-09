@@ -131,7 +131,7 @@ function initNav() {
 
 function loadView(view) {
   $$('[data-view-panel]').forEach((panel) => { panel.hidden = panel.dataset.viewPanel !== view; });
-  const loaders = { overview: loadOverview, projects: loadProjects, certificates: loadCertificates, hackathons: loadHackathons, experience: loadExperiences, messages: loadMessages, analytics: loadAnalytics };
+  const loaders = { overview: loadOverview, projects: loadProjects, certificates: loadCertificates, hackathons: loadHackathons, experience: loadExperiences, messages: loadMessages, analytics: loadAnalytics, reports: loadReportsDefault };
   (loaders[view] || (() => {}))().catch((err) => showToast(err.message));
 }
 
@@ -781,6 +781,526 @@ async function loadMessages() {
   }));
 }
 
+// ---- user activity & reports ----
+
+function val(id) {
+  const el = document.getElementById(id);
+  return el ? el.value.trim() : '';
+}
+
+// Dates come from <input type="date"> as "YYYY-MM-DD"; pin them to the start/end
+// of that day in UTC so a "to" filter includes the whole day it names.
+function dateFromVal(id) {
+  const v = val(id);
+  return v ? `${v}T00:00:00Z` : '';
+}
+function dateToVal(id) {
+  const v = val(id);
+  return v ? `${v}T23:59:59Z` : '';
+}
+
+function buildQuery(params) {
+  const usp = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => { if (v !== '' && v !== undefined && v !== null) usp.set(k, v); });
+  return usp.toString();
+}
+
+function statusPill(status) {
+  return `<span class="status-pill status-pill--${escapeHtml(status)}">${escapeHtml(status)}</span>`;
+}
+
+function formatDateTime(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString();
+}
+
+function renderPagination(container, { page, pageSize, total, onPageChange }) {
+  container.innerHTML = '';
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const prev = document.createElement('button');
+  prev.type = 'button'; prev.className = 'admin-btn'; prev.textContent = '← Prev';
+  prev.disabled = page <= 1;
+  prev.addEventListener('click', () => onPageChange(page - 1));
+  const info = document.createElement('span');
+  info.textContent = `Page ${page} of ${totalPages} · ${total} total`;
+  const next = document.createElement('button');
+  next.type = 'button'; next.className = 'admin-btn'; next.textContent = 'Next →';
+  next.disabled = page >= totalPages;
+  next.addEventListener('click', () => onPageChange(page + 1));
+  container.append(prev, info, next);
+}
+
+// Downloads a CSV via fetch (not a plain link) because the export endpoint
+// needs the admin's bearer token, which a navigable <a href> can't send.
+async function exportCsv(report, params) {
+  const token = getToken();
+  const query = buildQuery({ report, ...params });
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/admin/reports/export?${query}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    });
+    if (!res.ok) {
+      let message = `Export failed (HTTP ${res.status})`;
+      try { const json = await res.json(); if (json && json.message) message = json.message; } catch (e) { /* non-JSON error body */ }
+      throw new Error(message);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${report}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    showToast(err.message || 'Export failed.');
+  }
+}
+
+function loadReportsDefault() {
+  $$('.admin-subnav__link').forEach((b) => b.classList.toggle('is-active', b.dataset.subview === 'reports-overview'));
+  $$('[data-subview-panel]').forEach((panel) => { panel.hidden = panel.dataset.subviewPanel !== 'reports-overview'; });
+  return loadReportsOverview();
+}
+
+function initReportsSubnav() {
+  $$('.admin-subnav__link').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      $$('.admin-subnav__link').forEach((b) => b.classList.remove('is-active'));
+      btn.classList.add('is-active');
+      $$('[data-subview-panel]').forEach((panel) => { panel.hidden = panel.dataset.subviewPanel !== btn.dataset.subview; });
+      loadReportsSubview(btn.dataset.subview);
+    });
+  });
+}
+
+function loadReportsSubview(subview) {
+  const loaders = {
+    'reports-overview': loadReportsOverview,
+    'reports-users': loadReportsUsers,
+    'reports-signups': loadReportsSignups,
+    'reports-logins': loadReportsLogins,
+    'reports-failed': loadReportsFailed,
+    'reports-visits': loadReportsVisits,
+    'reports-timeline': () => loadReportsTimeline(1)
+  };
+  const fn = loaders[subview] || (() => Promise.resolve());
+  Promise.resolve(fn()).catch((err) => showToast(err.message));
+}
+
+// ---- reports: overview ----
+
+function periodDateParams() {
+  const period = val('reports-overview-period');
+  const params = { period };
+  if (period === 'custom') {
+    params.date_from = dateFromVal('reports-overview-from');
+    params.date_to = dateToVal('reports-overview-to');
+  }
+  return params;
+}
+
+function renderBars(container, breakdown) {
+  container.innerHTML = '';
+  const max = Math.max(1, ...Object.values(breakdown));
+  Object.entries(breakdown).forEach(([label, value]) => {
+    const pct = Math.round((value / max) * 100);
+    const row = document.createElement('div');
+    row.className = 'reports-bar-row';
+    row.innerHTML = `
+      <span class="reports-bar-row__label">${escapeHtml(label === 'password' ? 'Email/Password' : label)}</span>
+      <span class="reports-bar-row__track"><span class="reports-bar-row__fill" style="width:${pct}%"></span></span>
+      <span class="reports-bar-row__value">${value}</span>`;
+    container.appendChild(row);
+  });
+}
+
+async function loadReportsOverview() {
+  const errEl = $('#reports-overview-error');
+  errEl.textContent = '';
+  let data;
+  try {
+    data = await apiFetch(`/api/admin/reports/overview?${buildQuery(periodDateParams())}`);
+  } catch (err) {
+    errEl.textContent = err.message;
+    return;
+  }
+  renderStatCards($('#reports-overview-stats'), [
+    { label: 'Total Registered Users', value: data.total_users },
+    { label: 'New Signups Today', value: data.signups_today },
+    { label: 'New Signups (7d)', value: data.signups_last_7_days },
+    { label: 'New Signups (30d)', value: data.signups_last_30_days },
+    { label: 'Successful Logins Today', value: data.logins_success_today },
+    { label: 'Failed Logins Today', value: data.logins_failed_today },
+    { label: 'Active Sessions (est.)', value: data.active_sessions_estimate },
+    { label: 'Total Page Views', value: data.total_page_views },
+    { label: 'Unique Visitors Today', value: data.unique_visitors_today },
+    { label: 'Total Unique Visitors', value: data.total_unique_visitors },
+    { label: `Signups (${data.period.name})`, value: data.period.signups },
+    { label: `Logins OK (${data.period.name})`, value: data.period.logins_success },
+    { label: `Logins Failed (${data.period.name})`, value: data.period.logins_failed },
+    { label: `Page Views (${data.period.name})`, value: data.period.page_views },
+    { label: `Unique Visitors (${data.period.name})`, value: data.period.unique_visitors }
+  ]);
+  renderBars($('#reports-chart-registrations'), data.registrations_by_provider);
+  renderBars($('#reports-chart-logins'), data.logins_by_provider);
+  $('#reports-overview-note').textContent = data.active_sessions_note;
+}
+
+function initReportsOverviewControls() {
+  const periodSelect = $('#reports-overview-period');
+  periodSelect.addEventListener('change', () => {
+    $$('.reports-custom-range').forEach((el) => { el.hidden = periodSelect.value !== 'custom'; });
+  });
+  $('#reports-overview-apply').addEventListener('click', () => loadReportsOverview().catch((err) => showToast(err.message)));
+}
+
+// ---- reports: registered users (+ detail drawer) ----
+
+const reportsUsersState = { page: 1, pageSize: 25, items: [] };
+
+function reportsUsersFilters() {
+  return {
+    q: val('reports-users-q'),
+    provider: val('reports-users-provider'),
+    status: val('reports-users-status'),
+    verified: val('reports-users-verified'),
+    date_from: dateFromVal('reports-users-from'),
+    date_to: dateToVal('reports-users-to')
+  };
+}
+
+async function loadReportsUsers(page = reportsUsersState.page) {
+  reportsUsersState.page = page;
+  const query = buildQuery({ ...reportsUsersFilters(), page, page_size: reportsUsersState.pageSize });
+  const data = await apiFetch(`/api/admin/reports/users?${query}`);
+  reportsUsersState.items = data.items;
+
+  const tbody = $('#reports-users-table tbody');
+  tbody.innerHTML = '';
+  if (data.items.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" style="color:var(--muted)">No users match these filters.</td></tr>';
+  }
+  data.items.forEach((u) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><button type="button" class="reports-row-link" data-open-user="${u.id}">${escapeHtml(u.name)}</button></td>
+      <td>${escapeHtml(u.email)}</td>
+      <td>${formatDateTime(u.created_at)}</td>
+      <td>${escapeHtml(u.registration_method)}</td>
+      <td>${statusPill(u.is_active ? 'active' : 'disabled')}</td>
+      <td>${u.email_verified ? 'Yes' : 'No'}</td>
+      <td>${formatDateTime(u.last_login)}</td>
+      <td>${u.login_count}</td>
+      <td class="row-actions"><button type="button" class="admin-btn" data-open-user="${u.id}">View</button></td>`;
+    tbody.appendChild(tr);
+  });
+  tbody.querySelectorAll('[data-open-user]').forEach((btn) => btn.addEventListener('click', () => {
+    const user = reportsUsersState.items.find((u) => u.id === Number(btn.dataset.openUser));
+    if (user) openUserDrawer(user);
+  }));
+
+  renderPagination($('#reports-users-pagination'), {
+    page: data.page, pageSize: data.page_size, total: data.total,
+    onPageChange: (p) => loadReportsUsers(p).catch((err) => showToast(err.message))
+  });
+}
+
+let reportsDrawerUser = null;
+
+function openUserDrawer(user) {
+  reportsDrawerUser = user;
+  $('#reports-user-drawer-title').textContent = user.name;
+  $('#reports-user-drawer-fields').innerHTML = `
+    <dt>Email</dt><dd>${escapeHtml(user.email)}</dd>
+    <dt>User ID</dt><dd>${user.id}</dd>
+    <dt>Registered</dt><dd>${formatDateTime(user.created_at)}</dd>
+    <dt>Registration method</dt><dd>${escapeHtml(user.registration_method)}</dd>
+    <dt>Email verified</dt><dd>${user.email_verified ? 'Yes' : 'No'}</dd>
+    <dt>Account status</dt><dd>${statusPill(user.is_active ? 'active' : 'disabled')}</dd>
+    <dt>Last login</dt><dd>${formatDateTime(user.last_login)}</dd>
+    <dt>Successful logins</dt><dd>${user.login_count}</dd>
+    <dt>Last recorded activity</dt><dd>${formatDateTime(user.last_activity)}</dd>`;
+  const toggleBtn = $('#reports-user-drawer-toggle-status');
+  toggleBtn.textContent = user.is_active ? 'Disable account' : 'Re-enable account';
+  toggleBtn.className = user.is_active ? 'admin-btn admin-btn--danger' : 'admin-btn admin-btn--primary';
+  $('#reports-user-drawer').hidden = false;
+}
+
+function closeUserDrawer() {
+  $('#reports-user-drawer').hidden = true;
+  reportsDrawerUser = null;
+}
+
+function initUserDrawer() {
+  $('#reports-user-drawer-close').addEventListener('click', closeUserDrawer);
+  $('#reports-user-drawer').addEventListener('click', (e) => { if (e.target.id === 'reports-user-drawer') closeUserDrawer(); });
+
+  $('#reports-user-drawer-toggle-status').addEventListener('click', async () => {
+    if (!reportsDrawerUser) return;
+    const newStatus = !reportsDrawerUser.is_active;
+    try {
+      await apiFetch(`/api/admin/reports/users/${reportsDrawerUser.id}/status`, { method: 'PATCH', body: { is_active: newStatus } });
+      showToast(newStatus ? 'Account re-enabled' : 'Account disabled');
+      closeUserDrawer();
+      loadReportsUsers().catch((err) => showToast(err.message));
+    } catch (err) {
+      showToast(err.message);
+    }
+  });
+
+  $('#reports-user-drawer-timeline').addEventListener('click', () => {
+    if (!reportsDrawerUser) return;
+    const id = reportsDrawerUser.id;
+    closeUserDrawer();
+    $$('.admin-subnav__link').forEach((b) => b.classList.toggle('is-active', b.dataset.subview === 'reports-timeline'));
+    $$('[data-subview-panel]').forEach((panel) => { panel.hidden = panel.dataset.subviewPanel !== 'reports-timeline'; });
+    $('#reports-timeline-user-id').value = id;
+    loadReportsTimeline(1).catch((err) => showToast(err.message));
+  });
+}
+
+// ---- reports: signup history ----
+
+const reportsSignupsState = { page: 1, pageSize: 25 };
+
+function reportsSignupsFilters() {
+  return {
+    method: val('reports-signups-method'),
+    status: val('reports-signups-status'),
+    q: val('reports-signups-q'),
+    date_from: dateFromVal('reports-signups-from'),
+    date_to: dateToVal('reports-signups-to')
+  };
+}
+
+async function loadReportsSignups(page = reportsSignupsState.page) {
+  reportsSignupsState.page = page;
+  const query = buildQuery({ ...reportsSignupsFilters(), page, page_size: reportsSignupsState.pageSize });
+  const data = await apiFetch(`/api/admin/reports/signups?${query}`);
+  const tbody = $('#reports-signups-table tbody');
+  tbody.innerHTML = '';
+  if (data.items.length === 0) tbody.innerHTML = '<tr><td colspan="5" style="color:var(--muted)">No signup events match these filters.</td></tr>';
+  data.items.forEach((e) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${formatDateTime(e.created_at)}</td>
+      <td>${escapeHtml(e.email || '—')}</td>
+      <td>${escapeHtml(e.method)}</td>
+      <td>${statusPill(e.status)}</td>
+      <td>${escapeHtml(e.reason || '—')}</td>`;
+    tbody.appendChild(tr);
+  });
+  renderPagination($('#reports-signups-pagination'), {
+    page: data.page, pageSize: data.page_size, total: data.total,
+    onPageChange: (p) => loadReportsSignups(p).catch((err) => showToast(err.message))
+  });
+}
+
+// ---- reports: login history (logins + logouts) ----
+
+const reportsLoginsState = { page: 1, pageSize: 25 };
+
+function reportsLoginsFilters() {
+  return {
+    event_type: val('reports-logins-event_type'),
+    method: val('reports-logins-method'),
+    status: val('reports-logins-status'),
+    q: val('reports-logins-q'),
+    date_from: dateFromVal('reports-logins-from'),
+    date_to: dateToVal('reports-logins-to')
+  };
+}
+
+async function loadReportsLogins(page = reportsLoginsState.page) {
+  reportsLoginsState.page = page;
+  const query = buildQuery({ ...reportsLoginsFilters(), page, page_size: reportsLoginsState.pageSize });
+  const data = await apiFetch(`/api/admin/reports/auth-events?${query}`);
+  const tbody = $('#reports-logins-table tbody');
+  tbody.innerHTML = '';
+  if (data.items.length === 0) tbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted)">No events match these filters.</td></tr>';
+  data.items.forEach((e) => {
+    const browserOs = [e.browser, e.os].filter(Boolean).join(' / ') || '—';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${formatDateTime(e.created_at)}</td>
+      <td>${escapeHtml(e.email || '—')}</td>
+      <td>${escapeHtml(e.event_type)}</td>
+      <td>${escapeHtml(e.method)}</td>
+      <td>${statusPill(e.status)}</td>
+      <td>${escapeHtml(e.reason || '—')}</td>
+      <td>${escapeHtml(browserOs)}</td>`;
+    tbody.appendChild(tr);
+  });
+  renderPagination($('#reports-logins-pagination'), {
+    page: data.page, pageSize: data.page_size, total: data.total,
+    onPageChange: (p) => loadReportsLogins(p).catch((err) => showToast(err.message))
+  });
+}
+
+// ---- reports: failed login attempts ----
+
+const reportsFailedState = { page: 1, pageSize: 25 };
+
+function reportsFailedFilters() {
+  return {
+    method: val('reports-failed-method'),
+    q: val('reports-failed-q'),
+    date_from: dateFromVal('reports-failed-from'),
+    date_to: dateToVal('reports-failed-to')
+  };
+}
+
+async function loadReportsFailed(page = reportsFailedState.page) {
+  reportsFailedState.page = page;
+  const query = buildQuery({ ...reportsFailedFilters(), page, page_size: reportsFailedState.pageSize });
+  const data = await apiFetch(`/api/admin/reports/failed-logins?${query}`);
+  const tbody = $('#reports-failed-table tbody');
+  tbody.innerHTML = '';
+  if (data.items.length === 0) tbody.innerHTML = '<tr><td colspan="5" style="color:var(--muted)">No failed login attempts match these filters.</td></tr>';
+  data.items.forEach((e) => {
+    const browserOs = [e.browser, e.os].filter(Boolean).join(' / ') || '—';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${formatDateTime(e.created_at)}</td>
+      <td>${escapeHtml(e.email || '—')}</td>
+      <td>${escapeHtml(e.method)}</td>
+      <td>${escapeHtml(e.reason || '—')}</td>
+      <td>${escapeHtml(browserOs)}</td>`;
+    tbody.appendChild(tr);
+  });
+  renderPagination($('#reports-failed-pagination'), {
+    page: data.page, pageSize: data.page_size, total: data.total,
+    onPageChange: (p) => loadReportsFailed(p).catch((err) => showToast(err.message))
+  });
+}
+
+// ---- reports: visitor analytics ----
+
+const reportsVisitsState = { page: 1, pageSize: 25 };
+
+function reportsVisitsFilters() {
+  return {
+    page_filter: val('reports-visits-page_filter'),
+    session_id: val('reports-visits-session_id'),
+    date_from: dateFromVal('reports-visits-from'),
+    date_to: dateToVal('reports-visits-to')
+  };
+}
+
+async function loadReportsVisits(page = reportsVisitsState.page) {
+  reportsVisitsState.page = page;
+  const query = buildQuery({ ...reportsVisitsFilters(), page, page_size: reportsVisitsState.pageSize });
+  const data = await apiFetch(`/api/admin/reports/visits?${query}`);
+  const tbody = $('#reports-visits-table tbody');
+  tbody.innerHTML = '';
+  if (data.items.length === 0) tbody.innerHTML = '<tr><td colspan="5" style="color:var(--muted)">No visits match these filters.</td></tr>';
+  data.items.forEach((v) => {
+    const browserOs = [v.browser, v.os].filter(Boolean).join(' / ') || '—';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${formatDateTime(v.visited_at)}</td>
+      <td class="truncate" title="${escapeHtml(v.page)}">${escapeHtml(v.page)}</td>
+      <td class="truncate" title="${escapeHtml(v.referrer || '')}">${escapeHtml(v.referrer || '—')}</td>
+      <td>${escapeHtml(browserOs)}</td>
+      <td>${v.is_returning_visit ? 'Yes' : 'No'}</td>`;
+    tbody.appendChild(tr);
+  });
+  renderPagination($('#reports-visits-pagination'), {
+    page: data.page, pageSize: data.page_size, total: data.total,
+    onPageChange: (p) => loadReportsVisits(p).catch((err) => showToast(err.message))
+  });
+}
+
+// ---- reports: user activity timeline ----
+
+const reportsTimelineState = { page: 1, pageSize: 25 };
+
+function reportsTimelineFilters() {
+  return {
+    event_type: val('reports-timeline-event_type'),
+    date_from: dateFromVal('reports-timeline-from'),
+    date_to: dateToVal('reports-timeline-to')
+  };
+}
+
+function describeTimelineEvent(e) {
+  const methodLabel = e.method === 'password' ? 'email/password' : e.method;
+  if (e.event_type === 'account_created') return `Account created via ${methodLabel}`;
+  if (e.event_type === 'signup') return `Signed up via ${methodLabel} (${e.status})`;
+  if (e.event_type === 'login') return `Logged in via ${methodLabel} (${e.status}${e.reason ? ', ' + e.reason : ''})`;
+  if (e.event_type === 'logout') return `Logged out (${methodLabel})`;
+  return `${e.event_type} (${e.status})`;
+}
+
+async function loadReportsTimeline(page = reportsTimelineState.page) {
+  const userId = val('reports-timeline-user-id');
+  const header = $('#reports-timeline-header');
+  const list = $('#reports-timeline-list');
+  if (!userId) {
+    header.innerHTML = '';
+    list.innerHTML = '<li class="reports-note">Enter a user ID above, or open a user from Registered Users.</li>';
+    $('#reports-timeline-pagination').innerHTML = '';
+    return;
+  }
+  reportsTimelineState.page = page;
+  const query = buildQuery({ ...reportsTimelineFilters(), page, page_size: reportsTimelineState.pageSize });
+  let data;
+  try {
+    data = await apiFetch(`/api/admin/reports/users/${userId}/activity?${query}`);
+  } catch (err) {
+    header.innerHTML = `<p class="admin-error">${escapeHtml(err.message)}</p>`;
+    list.innerHTML = '';
+    $('#reports-timeline-pagination').innerHTML = '';
+    return;
+  }
+  header.innerHTML = `<h3>${escapeHtml(data.user.name)} <span style="color:var(--muted);font-size:0.8em">${escapeHtml(data.user.email)}</span></h3>`;
+  list.innerHTML = '';
+  if (data.items.length === 0) {
+    list.innerHTML = `<li class="reports-note">${escapeHtml(data.note || 'No activity recorded.')}</li>`;
+  }
+  data.items.forEach((e) => {
+    const li = document.createElement('li');
+    li.className = 'reports-timeline__item';
+    const dotClass = e.status === 'failure' ? 'reports-timeline__dot--failure' : 'reports-timeline__dot--success';
+    li.innerHTML = `
+      <span class="reports-timeline__dot ${dotClass}"></span>
+      <span>
+        <div>${escapeHtml(describeTimelineEvent(e))}</div>
+        <div class="reports-timeline__time">${formatDateTime(e.created_at)}</div>
+      </span>`;
+    list.appendChild(li);
+  });
+  renderPagination($('#reports-timeline-pagination'), {
+    page, pageSize: reportsTimelineState.pageSize, total: data.total,
+    onPageChange: (p) => loadReportsTimeline(p).catch((err) => showToast(err.message))
+  });
+}
+
+function initReportsControls() {
+  initReportsOverviewControls();
+
+  $('#reports-users-apply').addEventListener('click', () => loadReportsUsers(1).catch((err) => showToast(err.message)));
+  $('#reports-users-export').addEventListener('click', () => exportCsv('users', reportsUsersFilters()));
+
+  $('#reports-signups-apply').addEventListener('click', () => loadReportsSignups(1).catch((err) => showToast(err.message)));
+  $('#reports-signups-export').addEventListener('click', () => exportCsv('signups', reportsSignupsFilters()));
+
+  $('#reports-logins-apply').addEventListener('click', () => loadReportsLogins(1).catch((err) => showToast(err.message)));
+  $('#reports-logins-export').addEventListener('click', () => exportCsv('auth-events', reportsLoginsFilters()));
+
+  $('#reports-failed-apply').addEventListener('click', () => loadReportsFailed(1).catch((err) => showToast(err.message)));
+  $('#reports-failed-export').addEventListener('click', () => exportCsv('failed-logins', reportsFailedFilters()));
+
+  $('#reports-visits-apply').addEventListener('click', () => loadReportsVisits(1).catch((err) => showToast(err.message)));
+  $('#reports-visits-export').addEventListener('click', () => exportCsv('visits', reportsVisitsFilters()));
+
+  $('#reports-timeline-load').addEventListener('click', () => loadReportsTimeline(1).catch((err) => showToast(err.message)));
+
+  initUserDrawer();
+}
+
 // ---- boot ----
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -790,5 +1310,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initCertificateCreate();
   initHackathonCreate();
   initExperienceCreate();
+  initReportsSubnav();
+  initReportsControls();
   initAuth();
 });

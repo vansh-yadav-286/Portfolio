@@ -2,7 +2,7 @@ import enum
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import DateTime, Enum, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Enum, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base
@@ -29,6 +29,15 @@ class User(Base):
     # "google" / "github" / None for password-only accounts.
     oauth_provider: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     oauth_provider_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # True for OAuth accounts, since the provider already verified ownership of the
+    # email at signup. False for password accounts - this app has no email
+    # verification flow for those, so it would be dishonest to default it True.
+    email_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Admin-controlled kill switch (see PATCH /api/admin/reports/users/{id}/status).
+    # Enforced in auth_service.authenticate_user, the OAuth exchange route, and
+    # get_current_user, so a disabled account can neither log in again nor keep
+    # using a token it already holds.
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     role: Mapped[UserRole] = mapped_column(
         Enum(UserRole, name="user_role"), nullable=False, default=UserRole.user
     )

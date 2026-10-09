@@ -1,3 +1,5 @@
+from app.models.admin_audit_log import AdminAuditLog
+from app.models.auth_event import AuthEvent
 from app.models.certificate import Certificate
 from app.models.contact import ContactMessage, ContactStatus
 from app.models.experience import Experience
@@ -18,4 +20,6 @@ __all__ = [
     "ContactStatus",
     "Visitor",
     "OAuthLoginCode",
+    "AuthEvent",
+    "AdminAuditLog",
 ]

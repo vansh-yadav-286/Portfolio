@@ -39,6 +39,7 @@
       <button type="button" class="admin-nav__link" data-view="experience">Experience</button>
       <button type="button" class="admin-nav__link" data-view="messages">Contact Messages</button>
       <button type="button" class="admin-nav__link" data-view="analytics">Analytics</button>
+      <button type="button" class="admin-nav__link" data-view="reports">User Activity &amp; Reports</button>
     </nav>
     <button type="button" id="admin-logout" class="admin-btn admin-btn--ghost">Logout</button>
   </aside>
@@ -117,7 +118,217 @@
         <tbody></tbody>
       </table></div>
     </section>
+
+    <!-- User Activity & Reports -->
+    <section data-view-panel="reports" class="admin-view" hidden>
+      <div class="admin-view__header">
+        <h2>User Activity &amp; Reports</h2>
+      </div>
+
+      <nav class="admin-subnav">
+        <button type="button" class="admin-subnav__link is-active" data-subview="reports-overview">Overview</button>
+        <button type="button" class="admin-subnav__link" data-subview="reports-users">Registered Users</button>
+        <button type="button" class="admin-subnav__link" data-subview="reports-signups">Signup History</button>
+        <button type="button" class="admin-subnav__link" data-subview="reports-logins">Login History</button>
+        <button type="button" class="admin-subnav__link" data-subview="reports-failed">Failed Login Attempts</button>
+        <button type="button" class="admin-subnav__link" data-subview="reports-visits">Visitor Analytics</button>
+        <button type="button" class="admin-subnav__link" data-subview="reports-timeline">User Activity Timeline</button>
+      </nav>
+
+      <!-- Overview -->
+      <div data-subview-panel="reports-overview" class="admin-subview">
+        <div class="admin-filterbar">
+          <label class="admin-filter">Period
+            <select id="reports-overview-period">
+              <option value="today">Today</option>
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+              <option value="custom">Custom range</option>
+            </select>
+          </label>
+          <label class="admin-filter reports-custom-range" hidden>From <input type="date" id="reports-overview-from" /></label>
+          <label class="admin-filter reports-custom-range" hidden>To <input type="date" id="reports-overview-to" /></label>
+          <button type="button" class="admin-btn" id="reports-overview-apply">Apply</button>
+        </div>
+        <div id="reports-overview-error" class="admin-error" role="alert"></div>
+        <div class="admin-stats" id="reports-overview-stats"></div>
+        <div class="reports-chart-row">
+          <div class="reports-chart">
+            <h3>Registrations by provider</h3>
+            <div class="reports-bars" id="reports-chart-registrations"></div>
+          </div>
+          <div class="reports-chart">
+            <h3>Logins by provider</h3>
+            <div class="reports-bars" id="reports-chart-logins"></div>
+          </div>
+        </div>
+        <p class="reports-note" id="reports-overview-note"></p>
+      </div>
+
+      <!-- Registered Users -->
+      <div data-subview-panel="reports-users" class="admin-subview" hidden>
+        <div class="admin-filterbar">
+          <input type="search" id="reports-users-q" class="admin-filter" placeholder="Search name or email" />
+          <select id="reports-users-provider" class="admin-filter">
+            <option value="">All providers</option>
+            <option value="password">Email / Password</option>
+            <option value="google">Google</option>
+            <option value="github">GitHub</option>
+          </select>
+          <select id="reports-users-status" class="admin-filter">
+            <option value="">All statuses</option>
+            <option value="active">Active</option>
+            <option value="disabled">Disabled</option>
+          </select>
+          <select id="reports-users-verified" class="admin-filter">
+            <option value="">Any verification</option>
+            <option value="true">Verified</option>
+            <option value="false">Unverified</option>
+          </select>
+          <input type="date" id="reports-users-from" class="admin-filter" title="Registered from" />
+          <input type="date" id="reports-users-to" class="admin-filter" title="Registered to" />
+          <button type="button" class="admin-btn" id="reports-users-apply">Apply</button>
+          <button type="button" class="admin-btn admin-btn--ghost" id="reports-users-export">Export CSV</button>
+        </div>
+        <div class="admin-table-wrap"><table class="admin-table" id="reports-users-table">
+          <thead><tr><th>Name</th><th>Email</th><th>Registered</th><th>Method</th><th>Status</th><th>Verified</th><th>Last Login</th><th>Logins</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+        <div class="admin-pagination" id="reports-users-pagination"></div>
+      </div>
+
+      <!-- Signup History -->
+      <div data-subview-panel="reports-signups" class="admin-subview" hidden>
+        <div class="admin-filterbar">
+          <select id="reports-signups-method" class="admin-filter">
+            <option value="">All methods</option>
+            <option value="password">Email / Password</option>
+            <option value="google">Google</option>
+            <option value="github">GitHub</option>
+          </select>
+          <select id="reports-signups-status" class="admin-filter">
+            <option value="">All results</option>
+            <option value="success">Success</option>
+            <option value="failure">Failure</option>
+          </select>
+          <input type="search" id="reports-signups-q" class="admin-filter" placeholder="Search email" />
+          <input type="date" id="reports-signups-from" class="admin-filter" />
+          <input type="date" id="reports-signups-to" class="admin-filter" />
+          <button type="button" class="admin-btn" id="reports-signups-apply">Apply</button>
+          <button type="button" class="admin-btn admin-btn--ghost" id="reports-signups-export">Export CSV</button>
+        </div>
+        <div class="admin-table-wrap"><table class="admin-table" id="reports-signups-table">
+          <thead><tr><th>Timestamp</th><th>Email</th><th>Method</th><th>Result</th><th>Reason</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+        <div class="admin-pagination" id="reports-signups-pagination"></div>
+      </div>
+
+      <!-- Login History -->
+      <div data-subview-panel="reports-logins" class="admin-subview" hidden>
+        <div class="admin-filterbar">
+          <select id="reports-logins-event_type" class="admin-filter">
+            <option value="">Logins &amp; logouts</option>
+            <option value="login">Logins only</option>
+            <option value="logout">Logouts only</option>
+          </select>
+          <select id="reports-logins-method" class="admin-filter">
+            <option value="">All methods</option>
+            <option value="password">Email / Password</option>
+            <option value="google">Google</option>
+            <option value="github">GitHub</option>
+          </select>
+          <select id="reports-logins-status" class="admin-filter">
+            <option value="">All results</option>
+            <option value="success">Success</option>
+            <option value="failure">Failure</option>
+          </select>
+          <input type="search" id="reports-logins-q" class="admin-filter" placeholder="Search email" />
+          <input type="date" id="reports-logins-from" class="admin-filter" />
+          <input type="date" id="reports-logins-to" class="admin-filter" />
+          <button type="button" class="admin-btn" id="reports-logins-apply">Apply</button>
+          <button type="button" class="admin-btn admin-btn--ghost" id="reports-logins-export">Export CSV</button>
+        </div>
+        <div class="admin-table-wrap"><table class="admin-table" id="reports-logins-table">
+          <thead><tr><th>Timestamp</th><th>Email</th><th>Event</th><th>Method</th><th>Result</th><th>Reason</th><th>Browser / OS</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+        <div class="admin-pagination" id="reports-logins-pagination"></div>
+      </div>
+
+      <!-- Failed Login Attempts -->
+      <div data-subview-panel="reports-failed" class="admin-subview" hidden>
+        <div class="admin-filterbar">
+          <select id="reports-failed-method" class="admin-filter">
+            <option value="">All methods</option>
+            <option value="password">Email / Password</option>
+            <option value="google">Google</option>
+            <option value="github">GitHub</option>
+          </select>
+          <input type="search" id="reports-failed-q" class="admin-filter" placeholder="Search email" />
+          <input type="date" id="reports-failed-from" class="admin-filter" />
+          <input type="date" id="reports-failed-to" class="admin-filter" />
+          <button type="button" class="admin-btn" id="reports-failed-apply">Apply</button>
+          <button type="button" class="admin-btn admin-btn--ghost" id="reports-failed-export">Export CSV</button>
+        </div>
+        <div class="admin-table-wrap"><table class="admin-table" id="reports-failed-table">
+          <thead><tr><th>Timestamp</th><th>Email</th><th>Method</th><th>Reason</th><th>Browser / OS</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+        <div class="admin-pagination" id="reports-failed-pagination"></div>
+      </div>
+
+      <!-- Visitor Analytics -->
+      <div data-subview-panel="reports-visits" class="admin-subview" hidden>
+        <div class="admin-filterbar">
+          <input type="search" id="reports-visits-page_filter" class="admin-filter" placeholder="Search page" />
+          <input type="text" id="reports-visits-session_id" class="admin-filter" placeholder="Session ID" />
+          <input type="date" id="reports-visits-from" class="admin-filter" />
+          <input type="date" id="reports-visits-to" class="admin-filter" />
+          <button type="button" class="admin-btn" id="reports-visits-apply">Apply</button>
+          <button type="button" class="admin-btn admin-btn--ghost" id="reports-visits-export">Export CSV</button>
+        </div>
+        <div class="admin-table-wrap"><table class="admin-table" id="reports-visits-table">
+          <thead><tr><th>Visited</th><th>Page</th><th>Referrer</th><th>Browser / OS</th><th>Returning?</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+        <div class="admin-pagination" id="reports-visits-pagination"></div>
+      </div>
+
+      <!-- User Activity Timeline -->
+      <div data-subview-panel="reports-timeline" class="admin-subview" hidden>
+        <p class="reports-note">Open a user from Registered Users, or enter a user ID directly.</p>
+        <div class="admin-filterbar">
+          <input type="number" min="1" id="reports-timeline-user-id" class="admin-filter" placeholder="User ID" />
+          <select id="reports-timeline-event_type" class="admin-filter">
+            <option value="">All event types</option>
+            <option value="signup">Signup</option>
+            <option value="login">Login</option>
+            <option value="logout">Logout</option>
+          </select>
+          <input type="date" id="reports-timeline-from" class="admin-filter" />
+          <input type="date" id="reports-timeline-to" class="admin-filter" />
+          <button type="button" class="admin-btn" id="reports-timeline-load">Load</button>
+        </div>
+        <div id="reports-timeline-header"></div>
+        <ul class="reports-timeline" id="reports-timeline-list"></ul>
+        <div class="admin-pagination" id="reports-timeline-pagination"></div>
+      </div>
+    </section>
   </main>
+</div>
+
+<!-- User detail drawer (opened from Registered Users) -->
+<div id="reports-user-drawer" class="reports-drawer-overlay" hidden>
+  <div class="reports-drawer" role="dialog" aria-labelledby="reports-user-drawer-title">
+    <button type="button" class="admin-btn admin-btn--ghost reports-drawer__close" id="reports-user-drawer-close" aria-label="Close">&times;</button>
+    <h3 id="reports-user-drawer-title">User</h3>
+    <dl class="reports-drawer__fields" id="reports-user-drawer-fields"></dl>
+    <div class="reports-drawer__actions">
+      <button type="button" class="admin-btn" id="reports-user-drawer-toggle-status"></button>
+      <button type="button" class="admin-btn admin-btn--primary" id="reports-user-drawer-timeline">View full timeline</button>
+    </div>
+  </div>
 </div>
 
 <!-- Project / certificate edit dialog -->
