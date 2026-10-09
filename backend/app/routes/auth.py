@@ -3,23 +3,30 @@ import logging
 import secrets
 from urllib.parse import quote, urlparse
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.dependencies import get_current_user
-from app.core.rate_limit import limiter
-from app.core.security import sign_oauth_state, verify_oauth_state
+from app.core.dependencies import get_current_user, oauth2_scheme
+from app.core.rate_limit import get_client_ip, limiter
+from app.core.security import decode_access_token, sign_oauth_state, verify_oauth_state
 from app.database.database import get_db
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.user import OAuthExchangeRequest, Token, UserLogin, UserOut, UserRegister
-from app.services import oauth_service
+from app.services import audit_service, auth_event_service, oauth_service
 from app.services.auth_service import authenticate_user, issue_token, register_user
 from app.utils.helpers import api_error, success_response
 
 logger = logging.getLogger(__name__)
+
+
+def _sid_from_token(token_str: str) -> str | None:
+    try:
+        return decode_access_token(token_str).get("sid")
+    except ValueError:
+        return None
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -28,8 +35,27 @@ OAUTH_STATE_MAX_AGE = 600  # 10 minutes to complete the provider's consent scree
 
 
 @router.post("/register")
-def register(payload: UserRegister, db: Session = Depends(get_db)):
-    user = register_user(db, payload)
+def register(request: Request, payload: UserRegister, db: Session = Depends(get_db)):
+    ua = request.headers.get("user-agent")
+    ip = get_client_ip(request)
+    try:
+        user = register_user(db, payload)
+    except HTTPException as exc:
+        # Only a reliably-identified outcome (the email is already taken) is
+        # worth recording as a failed signup - a 422 never reaches here, since
+        # FastAPI rejects a malformed payload before this function runs.
+        if exc.status_code == 409:
+            auth_event_service.record_event(
+                db, method="password", event_type="signup", status="failure",
+                email=payload.email, reason="email_already_registered",
+                user_agent=ua, ip=ip,
+            )
+        raise
+
+    auth_event_service.record_event(
+        db, method="password", event_type="signup", status="success",
+        user=user, user_agent=ua, ip=ip,
+    )
     return success_response(
         UserOut.model_validate(user),
         "Account created successfully",
@@ -44,11 +70,28 @@ def login(
     payload: UserLogin,
     db: Session = Depends(get_db),
 ):
-    user = authenticate_user(db, payload)
-    token = Token(access_token=issue_token(user))
+    ua = request.headers.get("user-agent")
+    ip = get_client_ip(request)
+    try:
+        user = authenticate_user(db, payload)
+    except HTTPException as exc:
+        auth_event_service.record_event(
+            db, method="password", event_type="login", status="failure",
+            email=payload.email,
+            reason="account_disabled" if exc.status_code == 403 else "invalid_credentials",
+            user_agent=ua, ip=ip,
+        )
+        raise
 
+    access_token = issue_token(user)
+    auth_event_service.record_event(
+        db, method="password", event_type="login", status="success",
+        user=user, session_ref=_sid_from_token(access_token), user_agent=ua, ip=ip,
+    )
+    if user.role == UserRole.admin:
+        audit_service.record(db, admin_id=user.id, action="admin_login")
     return success_response(
-        token.model_dump(),
+        Token(access_token=access_token).model_dump(),
         "Login successful",
     )
 
@@ -64,10 +107,24 @@ def token(
         email=form_data.username,
         password=form_data.password,
     )
+    ua = request.headers.get("user-agent")
+    ip = get_client_ip(request)
+    try:
+        user = authenticate_user(db, payload)
+    except HTTPException as exc:
+        auth_event_service.record_event(
+            db, method="password", event_type="login", status="failure",
+            email=payload.email,
+            reason="account_disabled" if exc.status_code == 403 else "invalid_credentials",
+            user_agent=ua, ip=ip,
+        )
+        raise
 
-    user = authenticate_user(db, payload)
     access_token = issue_token(user)
-
+    auth_event_service.record_event(
+        db, method="password", event_type="login", status="success",
+        user=user, session_ref=_sid_from_token(access_token), user_agent=ua, ip=ip,
+    )
     return {
         "access_token": access_token,
         "token_type": "bearer",
@@ -83,10 +140,24 @@ def me(current_user: User = Depends(get_current_user)):
 
 
 @router.post("/logout")
-def logout():
-    # JWTs are stateless; the client discards the token.
-    # Documented here for API completeness / a future token-blacklist
-    # if one becomes necessary.
+def logout(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    raw_token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+):
+    auth_event_service.record_event(
+        db,
+        method=auth_event_service.infer_method(current_user),
+        event_type="logout",
+        status="success",
+        user=current_user,
+        session_ref=_sid_from_token(raw_token),
+        user_agent=request.headers.get("user-agent"),
+        ip=get_client_ip(request),
+    )
+    # JWTs are otherwise stateless; the client discards the token. This only
+    # records that the event happened, it doesn't revoke the token itself.
     return success_response(None, "Logged out successfully")
 
 
@@ -183,6 +254,9 @@ def _finish_oauth(
         return error_redirect("Invalid login session. Please try again.")
 
     redirect_base = _validated_redirect_base(payload.get("redirect"))
+    ua = request.headers.get("user-agent")
+    ip = get_client_ip(request)
+    profile: dict | None = None
 
     try:
         if provider == "google":
@@ -191,12 +265,35 @@ def _finish_oauth(
         else:
             token_data = oauth_service.exchange_github_code(code)
             profile = oauth_service.fetch_github_profile(token_data["access_token"])
-        user = oauth_service.find_or_create_oauth_user(db, provider, profile)
+        user, created = oauth_service.find_or_create_oauth_user(db, provider, profile)
     except oauth_service.OAuthError as exc:
+        # Reliably identifiable: the provider rejected the code, or the
+        # account-linking policy refused this attempt. Login, not signup -
+        # nothing was ever created, so there's no signup to log as failed.
+        auth_event_service.record_event(
+            db, method=provider, event_type="login", status="failure",
+            email=(profile or {}).get("email"), reason="oauth_error",
+            user_agent=ua, ip=ip,
+        )
         return error_redirect(str(exc), redirect_base)
     except Exception:
         logger.exception("OAuth callback failed for provider %s", provider)
+        auth_event_service.record_event(
+            db, method=provider, event_type="login", status="failure",
+            email=(profile or {}).get("email"), reason="provider_error",
+            user_agent=ua, ip=ip,
+        )
         return error_redirect("Something went wrong during login. Please try again.", redirect_base)
+
+    if created:
+        # The account row was just inserted - this is the one, authoritative
+        # point a signup is recorded. A retried/duplicated callback for the
+        # same provider identity lands in the `if user:` branch above instead
+        # (created=False), so it can never double-count a signup.
+        auth_event_service.record_event(
+            db, method=provider, event_type="signup", status="success",
+            user=user, user_agent=ua, ip=ip,
+        )
 
     login_code = oauth_service.create_login_code(db, user)
     response = RedirectResponse(f"{redirect_base}/?oauth=success&code={quote(login_code)}", status_code=302)
@@ -243,7 +340,24 @@ def github_callback(
 def oauth_exchange(request: Request, payload: OAuthExchangeRequest, db: Session = Depends(get_db)):
     user = oauth_service.consume_login_code(db, payload.code)
     if not user:
+        # Not reliably attributable to any account (the code is simply gone by
+        # now, e.g. the visitor abandoned the flow) - not worth recording as a
+        # failed login, that would conflate an expired code with a rejected one.
         raise api_error("That login code is invalid or has expired. Please log in again.", status_code=400)
 
-    token = Token(access_token=issue_token(user))
+    ua = request.headers.get("user-agent")
+    ip = get_client_ip(request)
+    if not user.is_active:
+        auth_event_service.record_event(
+            db, method=auth_event_service.infer_method(user), event_type="login", status="failure",
+            user=user, reason="account_disabled", user_agent=ua, ip=ip,
+        )
+        raise api_error("This account has been disabled.", status_code=403)
+
+    access_token = issue_token(user)
+    auth_event_service.record_event(
+        db, method=auth_event_service.infer_method(user), event_type="login", status="success",
+        user=user, session_ref=_sid_from_token(access_token), user_agent=ua, ip=ip,
+    )
+    token = Token(access_token=access_token)
     return success_response(token.model_dump(), "Login successful")

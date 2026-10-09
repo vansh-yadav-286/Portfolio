@@ -2,6 +2,7 @@ import base64
 import hashlib
 import hmac
 import json
+import secrets
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -25,7 +26,9 @@ def create_access_token(subject: str, role: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=settings.access_token_expire_minutes
     )
-    payload = {"sub": subject, "role": role, "exp": expire}
+    # "sid" is just a random correlation id, not a secret - it lets the activity
+    # log pair a login event with the logout that ends it, without storing the token.
+    payload = {"sub": subject, "role": role, "exp": expire, "sid": secrets.token_urlsafe(16)}
     return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
 

@@ -28,6 +28,8 @@ def authenticate_user(db: Session, payload: UserLogin) -> User:
     # OAuth-only accounts have no password_hash; reject rather than crash on verify_password.
     if not user or not user.password_hash or not verify_password(payload.password, user.password_hash):
         raise api_error("Invalid email or password", status_code=401)
+    if not user.is_active:
+        raise api_error("This account has been disabled.", status_code=403)
     return user
 
 

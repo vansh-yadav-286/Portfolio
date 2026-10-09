@@ -28,6 +28,10 @@ def get_current_user(
     user = db.query(User).filter(User.email == email).first()
     if user is None:
         raise credentials_exception
+    if not user.is_active:
+        # Revokes access immediately on deactivation, not just at the next login -
+        # an already-issued token stops working rather than staying valid until it expires.
+        raise credentials_exception
     return user
 
 

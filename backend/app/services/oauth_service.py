@@ -167,7 +167,12 @@ def fetch_github_profile(access_token: str) -> dict:
     }
 
 
-def find_or_create_oauth_user(db: Session, provider: str, profile: dict) -> User:
+def find_or_create_oauth_user(db: Session, provider: str, profile: dict) -> tuple[User, bool]:
+    """Returns (user, created). `created` is True only when a brand-new row was
+    inserted - callers use it to record exactly one signup event per account,
+    never once per callback (a retried/duplicated callback for an identity that
+    already exists just logs that identity in again, not a second signup).
+    """
     provider_id = profile["provider_id"]
     email = (profile.get("email") or "").strip().lower()
     if not email:
@@ -179,7 +184,7 @@ def find_or_create_oauth_user(db: Session, provider: str, profile: dict) -> User
         .first()
     )
     if user:
-        return user
+        return user, False
 
     existing = db.query(User).filter(User.email == email).first()
     if existing:
@@ -197,9 +202,10 @@ def find_or_create_oauth_user(db: Session, provider: str, profile: dict) -> User
             )
         existing.oauth_provider = provider
         existing.oauth_provider_id = provider_id
+        existing.email_verified = True
         db.commit()
         db.refresh(existing)
-        return existing
+        return existing, False
 
     user = User(
         name=profile.get("name") or "New User",
@@ -208,11 +214,15 @@ def find_or_create_oauth_user(db: Session, provider: str, profile: dict) -> User
         role=UserRole.user,
         oauth_provider=provider,
         oauth_provider_id=provider_id,
+        # Honest because it's a fact we actually have: the provider told us this
+        # address is verified. Never set True for a password signup - we never
+        # verify those.
+        email_verified=bool(profile.get("email_verified")),
     )
     db.add(user)
     db.commit()
     db.refresh(user)
-    return user
+    return user, True
 
 
 def _hash_code(raw_code: str) -> str:
