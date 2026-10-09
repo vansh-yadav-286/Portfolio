@@ -6,13 +6,28 @@ CREATE TYPE user_role AS ENUM ('admin', 'user');
 CREATE TYPE contact_status AS ENUM ('unread', 'read', 'replied', 'archived');
 
 CREATE TABLE users (
-    id              SERIAL PRIMARY KEY,
-    name            VARCHAR(120)  NOT NULL,
-    email           VARCHAR(255)  NOT NULL UNIQUE,
-    password_hash   VARCHAR(255)  NOT NULL,
-    role            user_role     NOT NULL DEFAULT 'user',
-    created_at      TIMESTAMPTZ   NOT NULL DEFAULT now(),
-    updated_at      TIMESTAMPTZ   NOT NULL DEFAULT now()
+    id                  SERIAL PRIMARY KEY,
+    name                VARCHAR(120)  NOT NULL,
+    email               VARCHAR(255)  NOT NULL UNIQUE,
+    password_hash       VARCHAR(255),              -- NULL for Google/GitHub-only accounts
+    oauth_provider      VARCHAR(20),               -- 'google' / 'github' / NULL
+    oauth_provider_id   VARCHAR(255),
+    role                user_role     NOT NULL DEFAULT 'user',
+    created_at          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    UNIQUE (oauth_provider, oauth_provider_id)
+);
+
+-- One-time codes handed to the browser in an OAuth callback redirect so it
+-- can fetch its real JWT via POST /api/auth/oauth/exchange, instead of the
+-- token (or any identity claim) ever appearing in a URL. Each row is deleted
+-- the moment it's redeemed or found expired (~60s TTL).
+CREATE TABLE oauth_login_codes (
+    id          SERIAL PRIMARY KEY,
+    code_hash   VARCHAR(64)  NOT NULL UNIQUE,
+    user_id     INTEGER      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    expires_at  TIMESTAMPTZ  NOT NULL,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
 CREATE TABLE projects (

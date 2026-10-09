@@ -29,3 +29,7 @@ class UserOut(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+class OAuthExchangeRequest(BaseModel):
+    code: str = Field(min_length=16, max_length=256)

@@ -25,7 +25,8 @@ def register_user(db: Session, payload: UserRegister) -> User:
 
 def authenticate_user(db: Session, payload: UserLogin) -> User:
     user = db.query(User).filter(User.email == payload.email).first()
-    if not user or not verify_password(payload.password, user.password_hash):
+    # OAuth-only accounts have no password_hash; reject rather than crash on verify_password.
+    if not user or not user.password_hash or not verify_password(payload.password, user.password_hash):
         raise api_error("Invalid email or password", status_code=401)
     return user
 

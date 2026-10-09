@@ -12,6 +12,17 @@ class Settings(BaseSettings):
     admin_email: str
     admin_password: str
 
+    # Public URL of this backend, used to build OAuth callback URLs
+    # (e.g. https://portfolio-api-i74q.onrender.com in production).
+    backend_url: str = "http://localhost:8000"
+
+    # OAuth credentials. Left blank, the corresponding provider's login route
+    # responds with 503 instead of crashing on startup.
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    github_client_id: str = ""
+    github_client_secret: str = ""
+
     @property
     def sqlalchemy_database_url(self) -> str:
         url = self.database_url
