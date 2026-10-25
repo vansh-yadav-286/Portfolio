@@ -64,11 +64,15 @@ function showApp() {
 async function initAuth() {
   const form = $('#admin-login-form');
   const errorEl = $('#admin-login-error');
+  const submitBtn = $('#admin-login-submit');
+  const statusEl = $('#admin-login-status');
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     errorEl.textContent = '';
     const data = new FormData(form);
+    submitBtn.disabled = true;
+    statusEl.hidden = false;
     try {
       const result = await apiFetch('/api/auth/login', {
         auth: false,
@@ -86,6 +90,9 @@ async function initAuth() {
       loadView('overview');
     } catch (err) {
       errorEl.textContent = err.message || 'Login failed.';
+    } finally {
+      submitBtn.disabled = false;
+      statusEl.hidden = true;
     }
   });
 

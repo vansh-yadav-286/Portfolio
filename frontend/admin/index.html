@@ -23,7 +23,13 @@
       <input type="password" name="password" autocomplete="current-password" required />
     </label>
     <p id="admin-login-error" class="admin-error" role="alert"></p>
-    <button type="submit" class="admin-btn admin-btn--primary">Login</button>
+    <div class="admin-auth__submit-row">
+      <button type="submit" id="admin-login-submit" class="admin-btn admin-btn--primary">Login</button>
+      <span id="admin-login-status" class="admin-login-status" hidden>
+        <span class="admin-spinner" aria-hidden="true"></span>
+        Logging in...
+      </span>
+    </div>
   </form>
 </section>
 
