@@ -74,6 +74,31 @@ body {
 }
 .admin-auth__card .admin-btn--primary:hover { filter: brightness(1.08); }
 
+.admin-auth__submit-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.admin-login-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: #DFBF72;
+}
+.admin-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(212, 175, 55, 0.3);
+  border-top-color: #d4af37;
+  border-radius: 50%;
+  animation: admin-spin 0.7s linear infinite;
+}
+@keyframes admin-spin {
+  to { transform: rotate(360deg); }
+}
+
 .admin-field { display: block; margin-bottom: 14px; font-size: 0.85rem; color: var(--muted); }
 .admin-field span { display: block; margin-bottom: 6px; }
 .admin-field input, .admin-field select, .admin-field textarea {
