@@ -1,35 +1,13 @@
-from datetime import datetime
-
-from pydantic import BaseModel, EmailStr, Field
-
-from app.models.user import UserRole
+from pydantic import BaseModel, EmailStr
 
 
-class UserRegister(BaseModel):
-    name: str = Field(min_length=2, max_length=120)
+class MeOut(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=8, max_length=128)
-
-
-class UserLogin(BaseModel):
-    email: EmailStr
-    password: str
-
-
-class UserOut(BaseModel):
-    id: int
     name: str
-    email: EmailStr
-    role: UserRole
-    created_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-
-
-class OAuthExchangeRequest(BaseModel):
-    code: str = Field(min_length=16, max_length=256)
+    role: str
+    provider: str
+    # Echoed back so the frontend can attach it as X-CSRF-Token on mutating
+    # requests - see core/dependencies.py::verify_csrf. Not a secret: it only
+    # proves the request came from a page that could read this response, i.e.
+    # the same browser that holds the (HttpOnly, unreadable) session cookie.
+    csrf_token: str

@@ -1,38 +1,36 @@
 # Portfolio API (backend)
 
-FastAPI backend for the portfolio: projects, certificates, contact form and analytics, with JWT-based auth and role-based admin access. PostgreSQL (hosted on Supabase) via SQLAlchemy; schema migrations live in [`../supabase/migrations`](../supabase/migrations).
+FastAPI backend for the portfolio: projects, certificates, workshops/hackathons, experience, and a contact form, with Google/GitHub OAuth and role-based admin access. **No database.** Content lives in JSON files (`app/data/`); auth is a signed, stateless session cookie derived from the OAuth provider's verified identity - there is no user table, no password, no Supabase, no SQLAlchemy, no Alembic.
 
 ## Architecture
 
 ```
 frontend/  (HTML/CSS/JS)
-    ↓ REST
+    ↓ REST (fetch, credentials: 'include')
 backend/app/routes      ← HTTP layer, request/response shapes
     ↓
 backend/app/schemas     ← Pydantic validation
     ↓
 backend/app/services    ← business logic
     ↓
-backend/app/models      ← SQLAlchemy ORM
-    ↓
-PostgreSQL
+backend/app/data/*.json  (content)  /  Google & GitHub OAuth (identity)
 ```
 
 ```
 app/
-├── main.py            # app wiring: CORS, exception handlers, routers, lifespan
+├── main.py            # app wiring: CORS, exception handlers, routers
 ├── core/
 │   ├── config.py       # Settings (env vars)
-│   ├── security.py     # password hashing, JWT encode/decode
-│   ├── dependencies.py # get_current_user / get_current_admin
-│   └── rate_limit.py   # slowapi limiter (used on /api/auth/login)
+│   ├── security.py     # session cookie sign/verify, OAuth state sign/verify
+│   ├── dependencies.py # get_current_user / get_current_admin / verify_csrf
+│   └── rate_limit.py   # slowapi limiter (login, contact form)
 ├── routes/             # one file per resource, thin HTTP layer
 ├── services/           # business logic, called by routes
 ├── schemas/            # Pydantic request/response models
-├── models/             # SQLAlchemy ORM models
-├── database/           # engine/session + declarative Base
+├── data/                # projects.json, certificates.json, experiences.json,
+│                        # hackathons.json + store.py's read/write helpers
 └── utils/helpers.py    # success_response(), api_error()
-tests/                  # pytest, one file per resource
+tests/                  # pytest, one file per resource — 63 tests
 ```
 
 ## Local development
@@ -41,18 +39,14 @@ tests/                  # pytest, one file per resource
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # fill in real values, including your Supabase DATABASE_URL
-
-psql "$DATABASE_URL" -f ../supabase/migrations/0001_init.sql   # creates the schema
+cp .env.example .env   # fill in SESSION_SECRET, ADMIN_EMAIL, OAuth creds, SMTP creds
 
 uvicorn app.main:app --reload
 ```
 
 API docs: `http://localhost:8000/docs` and `http://localhost:8000/redoc`.
 
-The admin account (role `admin`) is created automatically on first startup from `ADMIN_EMAIL` / `ADMIN_PASSWORD` — no manual seeding needed.
-
-**Note:** the admin account is only created if the email does not exist yet. Changing `ADMIN_PASSWORD` later does **not** update the existing account; change the password in the database (or delete the row and restart) instead. Log in at `POST /api/auth/login` with those credentials to use the admin dashboard.
+There is no admin account to seed. Whichever Google or GitHub account authenticates with the exact, provider-verified email set in `ADMIN_EMAIL` is granted the admin role at login time - nothing is created, stored, or needs resetting.
 
 ## Tests
 
@@ -64,7 +58,7 @@ pytest
 
 CI runs the same suite on every push and pull request that touches `backend/` (see `.github/workflows/backend-tests.yml`).
 
-Tests run against a throwaway SQLite database (`tests/conftest.py`), independent of your dev Postgres instance.
+Each test gets its own throwaway copy of `app/data/*.json` (`tests/conftest.py`'s `isolated_data_dir` fixture), independent of your real content files. OAuth provider calls (Google/GitHub token exchange and profile fetch) are mocked - no test ever makes a real network call to either provider.
 
 ## API
 
@@ -77,46 +71,51 @@ All responses use a consistent envelope:
 
 | Method | Path | Auth |
 |---|---|---|
-| POST | `/api/auth/register` | public |
-| POST | `/api/auth/login` | public (rate-limited: 5/min) |
-| GET | `/api/auth/me` | any authenticated user |
-| POST | `/api/auth/logout` | any authenticated user |
+| GET | `/api/auth/google/login`, `/api/auth/github/login` | public (rate-limited: 10/min) |
+| GET | `/api/auth/google/callback`, `/api/auth/github/callback` | public (completes the OAuth flow) |
+| GET | `/api/auth/me` | any authenticated session |
+| POST | `/api/auth/logout` | any authenticated session (+ CSRF header) |
 | GET | `/api/projects`, `/api/projects/{id}` | public |
-| POST/PUT/DELETE | `/api/projects[/{id}]` | admin |
+| POST/PUT/DELETE | `/api/projects[/{id}]` | admin + CSRF header |
 | GET | `/api/certificates`, `/api/certificates/{id}` | public |
-| POST/PUT/DELETE | `/api/certificates[/{id}]` | admin |
-| POST | `/api/contact` | public |
-| GET/PATCH/DELETE | `/api/contact[/{id}]` | admin |
-| GET | `/health` | public — runs `SELECT 1`; returns 503 if PostgreSQL is unreachable |
-| POST | `/api/analytics/visit` | public |
-| GET | `/api/analytics` | admin |
+| POST/PUT/DELETE | `/api/certificates[/{id}]` | admin + CSRF header |
+| GET | `/api/experiences`, `/api/experiences/{id}` | public |
+| POST/PUT/DELETE | `/api/experiences[/{id}]` | admin + CSRF header |
+| GET | `/api/hackathons` | public (visible items only) |
+| GET | `/api/hackathons/manage` | admin (all items, including hidden) |
+| POST/PUT/DELETE | `/api/hackathons[/{id}]` | admin + CSRF header |
+| POST | `/api/contact` | public (rate-limited: 5/min) - forwards by email, nothing is stored |
+| GET | `/health` | public - plain liveness check, no database to probe |
 
 ## Security
 
-- Passwords hashed with bcrypt (passlib).
-- JWT (HS256) via OAuth2PasswordBearer; admin-only routes are guarded by a role check (`app/core/dependencies.py`).
-- `/api/auth/login` is rate-limited (slowapi) against brute-force attempts.
-- CORS allows only the origins listed in `FRONTEND_URL` (comma-separated, e.g. `https://<user>.github.io,http://localhost:5500`) — never `*` — since the API is authenticated.
+- Google/GitHub OAuth only. A login is accepted only if the provider reports the email as verified - an unverified email is always rejected, never trusted on a string match.
+- Sessions are a signed (HS256), stateless JWT delivered as an **HttpOnly** cookie - never readable by page scripts, never put in `localStorage`/`sessionStorage`. `role` ("admin" vs "user") is decided once, at login, by comparing the verified email against `ADMIN_EMAIL` (case-insensitive) - it is baked into the token, not re-derived from anywhere.
+- CSRF protection on every mutating admin request (`core/dependencies.py::verify_csrf`): the frontend must echo a token from `GET /api/auth/me` back as `X-CSRF-Token`. This is required specifically because the session cookie is sent cross-site (`SameSite=None` in production, since Vercel and Render are different origins), which alone gives no CSRF protection.
+- `/api/auth/*/login` and `/api/contact` are rate-limited (slowapi) against abuse.
+- CORS allows only the origins listed in `FRONTEND_URL` (comma-separated, e.g. `https://<project>.vercel.app,http://localhost:5500`) — never `*` — required for the cross-site cookie to be sent at all, not just good practice.
 - All exceptions are caught centrally (`app/main.py`) so stack traces and internals are never returned to the client.
+- No database, so no SQL injection surface for this API's own queries; content writes go through `app/data/store.py`'s atomic JSON read/write.
 
-## Database: Supabase Postgres
+## Content storage - and its one real limitation
 
-1. Create a project at [supabase.com](https://supabase.com).
-2. Apply the schema: `psql "$SUPABASE_DB_URL" -f ../supabase/migrations/0001_init.sql` (or `supabase db push` if you're using the Supabase CLI and have linked the project).
-3. Grab the **pooled** connection string (Project Settings → Database → Connection string → "Transaction" mode, port 6543) for `DATABASE_URL` — see `.env.example` for why the pooled port matters on serverless.
-4. **Migrating existing data from another Postgres instance** (e.g. if you were previously on Azure Database for PostgreSQL via Render): `pg_dump --no-owner --no-privileges --format=custom "$OLD_DATABASE_URL" > backup.dump`, then restore with `pg_restore --no-owner --no-privileges -d "$SUPABASE_DIRECT_DB_URL" backup.dump` against Supabase's **direct** connection (port 5432, not the pooler — `pg_restore` needs a session-level connection). Run this once, before pointing the app at Supabase.
+`app/data/{projects,certificates,experiences,hackathons}.json` are the content. See [`app/data/README.md`](app/data/README.md) for the exact shape of each file.
 
-## Deploying to Vercel
+**Writes made through the admin dashboard are not durable on Render.** Render's filesystem resets on every redeploy (and isn't guaranteed to survive a plain restart either, depending on plan). An edit made through the admin UI will be silently lost the next time the service redeploys unless the updated JSON file is also committed back into the repo. Treat the admin editor as a convenience for drafting content you'll immediately commit, not as a live CMS.
 
-This service is deployed on **Vercel** as a Python serverless project (Supabase hosts the database only — it has no facility to run a persistent FastAPI process). `backend/vercel.json` builds `api/index.py`, a thin wrapper that re-exports the existing `app.main.app` ASGI app unchanged, and rewrites every path to it.
+## Deploying to Render
+
+This service is deployed on **Render**, as a normal persistent web service — the in-memory rate limiter and the OAuth flow both assume one long-lived process, which serverless platforms don't give you (each instance has its own memory, with no state shared between them). `render.yaml` at the repo root is a ready-to-use Blueprint - a single web service, no database.
 
 1. Push this repo to GitHub.
-2. In Vercel, import the repo as a new project with **Root Directory = `backend`**. Vercel detects `vercel.json` and builds `api/index.py` with the `@vercel/python` runtime.
-3. Set the environment variables in that Vercel project's dashboard (never commit them): `DATABASE_URL` (Supabase's pooled connection string, see above), `SECRET_KEY`, `ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `FRONTEND_URL` (the frontend's Vercel origin, plus `http://localhost:5500` for local development, comma-separated), `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `BACKEND_URL` (this backend's own Vercel URL, used to build OAuth callback URLs), and the Google/GitHub OAuth client vars.
-4. Update the redirect/callback URIs registered in the Google Cloud Console and GitHub OAuth App settings to `{BACKEND_URL}/api/auth/google/callback` and `{BACKEND_URL}/api/auth/github/callback` using the new Vercel URL.
+2. In Render, create a new Blueprint from the repo's `render.yaml`.
+3. Build command: `pip install -r backend/requirements.txt`
+4. Start command: `cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+5. Set the environment variables in the Render dashboard (never commit them): `SESSION_SECRET`, `SESSION_MAX_AGE_MINUTES`, `FRONTEND_URL` (the frontend's Vercel origin, plus `http://localhost:5500` for local development, comma-separated), `ADMIN_EMAIL`, `BACKEND_URL` (this service's own Render URL, used to build OAuth callback URLs), the Google/GitHub OAuth client vars, and the SMTP vars (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `CONTACT_EMAIL_TO`, `CONTACT_EMAIL_FROM`).
+6. Update the redirect/callback URIs registered in the Google Cloud Console and GitHub OAuth App settings to `{BACKEND_URL}/api/auth/google/callback` and `{BACKEND_URL}/api/auth/github/callback` using the real Render URL.
 
-**Known limitation:** `/api/auth/login`'s rate limiting (`slowapi`, `app/core/rate_limit.py`) uses in-memory storage. On Vercel, each serverless instance has its own memory, so the limit is per-instance rather than global, and resets on cold start. For this portfolio's traffic that's an acceptable tradeoff; if it ever needs to be airtight, swap the limiter's storage backend for Redis (e.g. Upstash) or a Postgres-backed counter instead.
+Render supplies `$PORT` at runtime; the start command binds to it rather than a hardcoded port.
 
 ## Frontend integration
 
-The frontend calls this API through a single `API_BASE_URL` constant (`frontend/js/config.js`) — never hardcoded inline. Point it at `http://localhost:8000` in development and this backend's Vercel URL in production.
+The frontend calls this API through a single `API_BASE_URL` constant (`frontend/js/config.js`) — never hardcoded inline. Point it at `http://localhost:8000` in development and this backend's Render URL in production. Every authenticated `fetch()` must pass `credentials: 'include'` so the session cookie is sent; mutating admin requests must also attach `X-CSRF-Token` (from `GET /api/auth/me`'s response).

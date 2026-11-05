@@ -1,42 +1,33 @@
-from sqlalchemy.orm import Session
+from datetime import datetime, timezone
 
-from app.models.project import Project
+from app.data import store
 from app.schemas.project import ProjectCreate, ProjectUpdate
-from app.utils.helpers import api_error
+
+STORE = "projects"
 
 
-def list_projects(db: Session, featured_only: bool = False) -> list[Project]:
-    query = db.query(Project)
+def list_projects(featured_only: bool = False) -> list[dict]:
+    items = store.read_all(STORE)
     if featured_only:
-        query = query.filter(Project.featured.is_(True))
-    return query.order_by(Project.display_order.asc(), Project.id.asc()).all()
+        items = [p for p in items if p.get("featured")]
+    return sorted(items, key=lambda p: (p["display_order"], p["id"]))
 
 
-def get_project(db: Session, project_id: int) -> Project:
-    project = db.get(Project, project_id)
-    if project is None:
-        raise api_error("Project not found", status_code=404)
-    return project
+def get_project(project_id: int) -> dict:
+    return store.get_one(STORE, project_id, "Project not found")
 
 
-def create_project(db: Session, payload: ProjectCreate) -> Project:
-    project = Project(**payload.model_dump())
-    db.add(project)
-    db.commit()
-    db.refresh(project)
-    return project
+def create_project(payload: ProjectCreate) -> dict:
+    now = datetime.now(timezone.utc)
+    data = {**payload.model_dump(), "created_at": now, "updated_at": now}
+    return store.create(STORE, data)
 
 
-def update_project(db: Session, project_id: int, payload: ProjectUpdate) -> Project:
-    project = get_project(db, project_id)
-    for field, value in payload.model_dump(exclude_unset=True).items():
-        setattr(project, field, value)
-    db.commit()
-    db.refresh(project)
-    return project
+def update_project(project_id: int, payload: ProjectUpdate) -> dict:
+    changes = payload.model_dump(exclude_unset=True)
+    changes["updated_at"] = datetime.now(timezone.utc)
+    return store.update(STORE, project_id, changes, "Project not found")
 
 
-def delete_project(db: Session, project_id: int) -> None:
-    project = get_project(db, project_id)
-    db.delete(project)
-    db.commit()
+def delete_project(project_id: int) -> None:
+    store.delete(STORE, project_id, "Project not found")

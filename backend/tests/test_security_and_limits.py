@@ -1,91 +1,64 @@
 import pytest
 
-
-def _admin_headers(client):
-    token = client.post(
-        "/api/auth/login",
-        json={"email": "admin@example.com", "password": "admin-test-password"},
-    ).json()["data"]["access_token"]
-    return {"Authorization": f"Bearer {token}"}
-
-
-def _register_user(client):
-    client.post(
-        "/api/auth/register",
-        json={"name": "Jane Doe", "email": "jane@example.com", "password": "supersecret1"},
-    )
-    token = client.post(
-        "/api/auth/login",
-        json={"email": "jane@example.com", "password": "supersecret1"},
-    ).json()["data"]["access_token"]
-    return {"Authorization": f"Bearer {token}"}
-
-
 PROJECT = {"title": "Demo", "description": "A project", "technologies": "Python"}
 
 
-def test_non_admin_cannot_create_project(client):
-    headers = _register_user(client)
-    response = client.post("/api/projects", json=PROJECT, headers=headers)
-    assert response.status_code == 403
+def _configure_smtp(monkeypatch):
+    from app.core.config import settings
 
-
-def test_non_admin_cannot_read_analytics(client):
-    headers = _register_user(client)
-    assert client.get("/api/analytics", headers=headers).status_code == 403
-
-
-def test_admin_can_read_analytics(client):
-    response = client.get("/api/analytics", headers=_admin_headers(client))
-    assert response.status_code == 200
-    assert response.json()["data"]["total_visitors"] == 0
-
-
-def test_visit_is_recorded_with_hashed_ip(client):
-    response = client.post(
-        "/api/analytics/visit",
-        json={"session_id": "abc", "page": "/"},
-        headers={"X-Forwarded-For": "203.0.113.7"},
-    )
-    assert response.status_code == 201
+    monkeypatch.setattr(settings, "smtp_host", "smtp.example.com")
+    monkeypatch.setattr(settings, "contact_email_to", "owner@example.com")
+    monkeypatch.setattr(settings, "contact_email_from", "noreply@example.com")
+    monkeypatch.setattr("app.services.contact_service.send_contact_email", lambda *a: None)
 
 
 @pytest.mark.parametrize(
     "bad_url",
     ["javascript:alert(1)", "data:text/html,<script>x</script>", "//evil.example.com/x"],
 )
-def test_project_rejects_unsafe_urls(client, bad_url):
+def test_project_rejects_unsafe_urls(client, admin_csrf, bad_url):
     response = client.post(
-        "/api/projects", json={**PROJECT, "live_url": bad_url}, headers=_admin_headers(client)
+        "/api/projects",
+        json={**PROJECT, "live_url": bad_url},
+        headers={"X-CSRF-Token": admin_csrf},
     )
     assert response.status_code == 422
 
 
-def test_project_accepts_http_and_relative_urls(client):
+def test_project_accepts_http_and_relative_urls(client, admin_csrf):
     response = client.post(
         "/api/projects",
         json={**PROJECT, "live_url": "https://example.com", "image_url": "assets/x.jpg"},
-        headers=_admin_headers(client),
+        headers={"X-CSRF-Token": admin_csrf},
     )
     assert response.status_code == 201
 
 
-def test_empty_url_is_stored_as_null(client):
+def test_empty_url_is_stored_as_null(client, admin_csrf):
     response = client.post(
-        "/api/projects", json={**PROJECT, "github_url": "  "}, headers=_admin_headers(client)
+        "/api/projects",
+        json={**PROJECT, "github_url": "  "},
+        headers={"X-CSRF-Token": admin_csrf},
     )
     assert response.status_code == 201
     assert response.json()["data"]["github_url"] is None
 
 
-def test_contact_endpoint_is_rate_limited(client):
+def test_contact_endpoint_is_rate_limited(client, monkeypatch):
+    _configure_smtp(monkeypatch)
     payload = {"name": "Visitor", "email": "v@example.com", "message": "hi"}
     statuses = [client.post("/api/contact", json=payload).status_code for _ in range(6)]
     assert statuses[:5] == [201] * 5
     assert statuses[5] == 429
 
 
-def test_visit_endpoint_is_rate_limited(client):
-    payload = {"session_id": "abc", "page": "/"}
-    statuses = [client.post("/api/analytics/visit", json=payload).status_code for _ in range(61)]
-    assert statuses[-1] == 429
+def test_google_login_is_rate_limited(client, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "google_client_id", "id")
+    monkeypatch.setattr(settings, "google_client_secret", "secret")
+    statuses = [
+        client.get("/api/auth/google/login", follow_redirects=False).status_code for _ in range(11)
+    ]
+    assert statuses[:10] == [302] * 10
+    assert statuses[10] == 429

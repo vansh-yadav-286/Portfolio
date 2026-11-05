@@ -3,30 +3,18 @@ import logging
 import secrets
 from urllib.parse import quote, urlparse
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
-from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.dependencies import get_current_user, oauth2_scheme
-from app.core.rate_limit import get_client_ip, limiter
-from app.core.security import decode_access_token, sign_oauth_state, verify_oauth_state
-from app.database.database import get_db
-from app.models.user import User, UserRole
-from app.schemas.user import OAuthExchangeRequest, Token, UserLogin, UserOut, UserRegister
-from app.services import audit_service, auth_event_service, oauth_service
-from app.services.auth_service import authenticate_user, issue_token, register_user
+from app.core.dependencies import SESSION_COOKIE, CurrentUser, get_current_user, verify_csrf
+from app.core.rate_limit import limiter
+from app.core.security import create_session_token, sign_oauth_state, verify_oauth_state
+from app.schemas.user import MeOut
+from app.services import oauth_service
 from app.utils.helpers import api_error, success_response
 
 logger = logging.getLogger(__name__)
-
-
-def _sid_from_token(token_str: str) -> str | None:
-    try:
-        return decode_access_token(token_str).get("sid")
-    except ValueError:
-        return None
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -34,154 +22,37 @@ OAUTH_STATE_COOKIE = "oauth_state"
 OAUTH_STATE_MAX_AGE = 600  # 10 minutes to complete the provider's consent screen
 
 
-@router.post("/register")
-def register(request: Request, payload: UserRegister, db: Session = Depends(get_db)):
-    ua = request.headers.get("user-agent")
-    ip = get_client_ip(request)
-    try:
-        user = register_user(db, payload)
-    except HTTPException as exc:
-        # Only a reliably-identified outcome (the email is already taken) is
-        # worth recording as a failed signup - a 422 never reaches here, since
-        # FastAPI rejects a malformed payload before this function runs.
-        if exc.status_code == 409:
-            auth_event_service.record_event(
-                db, method="password", event_type="signup", status="failure",
-                email=payload.email, reason="email_already_registered",
-                user_agent=ua, ip=ip,
-            )
-        raise
-
-    auth_event_service.record_event(
-        db, method="password", event_type="signup", status="success",
-        user=user, user_agent=ua, ip=ip,
-    )
-    return success_response(
-        UserOut.model_validate(user),
-        "Account created successfully",
-        status_code=201,
-    )
-
-
-@router.post("/login")
-@limiter.limit("5/minute")
-def login(
-    request: Request,
-    payload: UserLogin,
-    db: Session = Depends(get_db),
-):
-    ua = request.headers.get("user-agent")
-    ip = get_client_ip(request)
-    try:
-        user = authenticate_user(db, payload)
-    except HTTPException as exc:
-        auth_event_service.record_event(
-            db, method="password", event_type="login", status="failure",
-            email=payload.email,
-            reason="account_disabled" if exc.status_code == 403 else "invalid_credentials",
-            user_agent=ua, ip=ip,
-        )
-        raise
-
-    access_token = issue_token(user)
-    auth_event_service.record_event(
-        db, method="password", event_type="login", status="success",
-        user=user, session_ref=_sid_from_token(access_token), user_agent=ua, ip=ip,
-    )
-    if user.role == UserRole.admin:
-        audit_service.record(db, admin_id=user.id, action="admin_login")
-    return success_response(
-        Token(access_token=access_token).model_dump(),
-        "Login successful",
-    )
-
-
-@router.post("/token")
-@limiter.limit("5/minute")
-def token(
-    request: Request,
-    form_data: OAuth2PasswordRequestForm = Depends(),
-    db: Session = Depends(get_db),
-):
-    payload = UserLogin(
-        email=form_data.username,
-        password=form_data.password,
-    )
-    ua = request.headers.get("user-agent")
-    ip = get_client_ip(request)
-    try:
-        user = authenticate_user(db, payload)
-    except HTTPException as exc:
-        auth_event_service.record_event(
-            db, method="password", event_type="login", status="failure",
-            email=payload.email,
-            reason="account_disabled" if exc.status_code == 403 else "invalid_credentials",
-            user_agent=ua, ip=ip,
-        )
-        raise
-
-    access_token = issue_token(user)
-    auth_event_service.record_event(
-        db, method="password", event_type="login", status="success",
-        user=user, session_ref=_sid_from_token(access_token), user_agent=ua, ip=ip,
-    )
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-    }
-
-
-@router.get("/me")
-def me(current_user: User = Depends(get_current_user)):
-    return success_response(
-        UserOut.model_validate(current_user),
-        "Current user",
-    )
-
-
-@router.post("/logout")
-def logout(
-    request: Request,
-    current_user: User = Depends(get_current_user),
-    raw_token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db),
-):
-    auth_event_service.record_event(
-        db,
-        method=auth_event_service.infer_method(current_user),
-        event_type="logout",
-        status="success",
-        user=current_user,
-        session_ref=_sid_from_token(raw_token),
-        user_agent=request.headers.get("user-agent"),
-        ip=get_client_ip(request),
-    )
-    # JWTs are otherwise stateless; the client discards the token. This only
-    # records that the event happened, it doesn't revoke the token itself.
-    return success_response(None, "Logged out successfully")
-
-
 # ---------------------------------------------------------------------------
-# Google / GitHub OAuth
+# Google / GitHub OAuth - the only login methods. There is no database: no
+# password login, no user table. A successful login issues a signed, stateless
+# session cookie whose claims (email/name/role/provider) are trusted as-is on
+# every later request - nothing is looked up server-side. "role" is decided
+# once, right here, by comparing the provider-verified email against
+# ADMIN_EMAIL; it is never re-derived from anywhere else.
 #
-# The frontend's "Continue with Google/GitHub" buttons navigate the whole
-# page to the /login route below (not a fetch() call - the provider's
-# consent screen can't be shown inside an XHR). The browser ends up back on
-# /callback, which redirects to the frontend with either ?oauth_error=<message>
-# or ?oauth=success&code=<one-time code>.
-#
-# That code is deliberately NOT the access token, and the redirect carries no
-# email/identity claim for the frontend to trust - the frontend must POST the
-# code to /oauth/exchange below, which looks it up server-side and only then
-# returns a real JWT, identical in shape to what /api/auth/login returns.
-# Putting the JWT itself in a URL would leak it into browser history, the
-# Referer header and both hosts' access logs; this way the only thing exposed
-# there is a 60-second, single-use code that is worthless once redeemed.
+# The frontend's "Continue with Google/GitHub" buttons navigate the whole page
+# to the /login route below (not a fetch() call - the provider's consent
+# screen can't be shown inside an XHR). The browser ends up back on /callback,
+# which sets the session cookie directly on its redirect response and sends
+# the browser to the frontend with just `?oauth=success` (or `?oauth_error=...`
+# on failure) - no code or token ever appears in a URL, browser history, or
+# Referer header.
 # ---------------------------------------------------------------------------
 
 
 def _is_secure_backend() -> bool:
     return urlparse(settings.backend_url).scheme == "https"
+
+
+def _cookie_kwargs() -> dict:
+    # Frontend (Vercel) and backend (Render) are different origins in
+    # production, so the session cookie must be SameSite=None to be sent on
+    # cross-site fetch() calls - which in turn requires Secure=True (browsers
+    # reject SameSite=None without it). Locally both run on localhost (same
+    # registrable domain, different port), which is same-site, so Lax +
+    # non-secure works for http development.
+    secure = _is_secure_backend()
+    return {"httponly": True, "secure": secure, "samesite": "none" if secure else "lax"}
 
 
 def _validated_redirect_base(redirect: str | None) -> str:
@@ -213,9 +84,7 @@ def _start_oauth(provider: str, redirect: str | None) -> RedirectResponse:
         OAUTH_STATE_COOKIE,
         state,
         max_age=OAUTH_STATE_MAX_AGE,
-        httponly=True,
-        secure=_is_secure_backend(),
-        samesite="lax",
+        **_cookie_kwargs(),
     )
     return response
 
@@ -226,7 +95,6 @@ def _finish_oauth(
     code: str | None,
     state: str | None,
     error: str | None,
-    db: Session,
 ) -> RedirectResponse:
     fallback_redirect = settings.frontend_origins[0] if settings.frontend_origins else settings.frontend_url.rstrip("/")
 
@@ -254,9 +122,6 @@ def _finish_oauth(
         return error_redirect("Invalid login session. Please try again.")
 
     redirect_base = _validated_redirect_base(payload.get("redirect"))
-    ua = request.headers.get("user-agent")
-    ip = get_client_ip(request)
-    profile: dict | None = None
 
     try:
         if provider == "google":
@@ -265,39 +130,35 @@ def _finish_oauth(
         else:
             token_data = oauth_service.exchange_github_code(code)
             profile = oauth_service.fetch_github_profile(token_data["access_token"])
-        user, created = oauth_service.find_or_create_oauth_user(db, provider, profile)
     except oauth_service.OAuthError as exc:
-        # Reliably identifiable: the provider rejected the code, or the
-        # account-linking policy refused this attempt. Login, not signup -
-        # nothing was ever created, so there's no signup to log as failed.
-        auth_event_service.record_event(
-            db, method=provider, event_type="login", status="failure",
-            email=(profile or {}).get("email"), reason="oauth_error",
-            user_agent=ua, ip=ip,
-        )
         return error_redirect(str(exc), redirect_base)
     except Exception:
         logger.exception("OAuth callback failed for provider %s", provider)
-        auth_event_service.record_event(
-            db, method=provider, event_type="login", status="failure",
-            email=(profile or {}).get("email"), reason="provider_error",
-            user_agent=ua, ip=ip,
-        )
         return error_redirect("Something went wrong during login. Please try again.", redirect_base)
 
-    if created:
-        # The account row was just inserted - this is the one, authoritative
-        # point a signup is recorded. A retried/duplicated callback for the
-        # same provider identity lands in the `if user:` branch above instead
-        # (created=False), so it can never double-count a signup.
-        auth_event_service.record_event(
-            db, method=provider, event_type="signup", status="success",
-            user=user, user_agent=ua, ip=ip,
+    email = (profile.get("email") or "").strip().lower()
+    if not email:
+        return error_redirect("Your account has no email address we can use to sign you in.", redirect_base)
+    if not profile.get("email_verified"):
+        # Never grant access on an unverified email - a string match isn't proof
+        # of ownership, only the provider's own verification is.
+        return error_redirect(
+            "Your email on this provider isn't verified. Verify it and try again.", redirect_base
         )
 
-    login_code = oauth_service.create_login_code(db, user)
-    response = RedirectResponse(f"{redirect_base}/?oauth=success&code={quote(login_code)}", status_code=302)
+    role = "admin" if email == settings.admin_email.strip().lower() else "user"
+    session_token, _ = create_session_token(
+        email=email, name=profile.get("name") or email, role=role, provider=provider
+    )
+
+    response = RedirectResponse(f"{redirect_base}/?oauth=success", status_code=302)
     response.delete_cookie(OAUTH_STATE_COOKIE)
+    response.set_cookie(
+        SESSION_COOKIE,
+        session_token,
+        max_age=settings.session_max_age_minutes * 60,
+        **_cookie_kwargs(),
+    )
     return response
 
 
@@ -313,9 +174,8 @@ def google_callback(
     code: str | None = None,
     state: str | None = None,
     error: str | None = None,
-    db: Session = Depends(get_db),
 ):
-    return _finish_oauth(request, "google", code, state, error, db)
+    return _finish_oauth(request, "google", code, state, error)
 
 
 @router.get("/github/login")
@@ -330,34 +190,28 @@ def github_callback(
     code: str | None = None,
     state: str | None = None,
     error: str | None = None,
-    db: Session = Depends(get_db),
 ):
-    return _finish_oauth(request, "github", code, state, error, db)
+    return _finish_oauth(request, "github", code, state, error)
 
 
-@router.post("/oauth/exchange")
-@limiter.limit("10/minute")
-def oauth_exchange(request: Request, payload: OAuthExchangeRequest, db: Session = Depends(get_db)):
-    user = oauth_service.consume_login_code(db, payload.code)
-    if not user:
-        # Not reliably attributable to any account (the code is simply gone by
-        # now, e.g. the visitor abandoned the flow) - not worth recording as a
-        # failed login, that would conflate an expired code with a rejected one.
-        raise api_error("That login code is invalid or has expired. Please log in again.", status_code=400)
-
-    ua = request.headers.get("user-agent")
-    ip = get_client_ip(request)
-    if not user.is_active:
-        auth_event_service.record_event(
-            db, method=auth_event_service.infer_method(user), event_type="login", status="failure",
-            user=user, reason="account_disabled", user_agent=ua, ip=ip,
-        )
-        raise api_error("This account has been disabled.", status_code=403)
-
-    access_token = issue_token(user)
-    auth_event_service.record_event(
-        db, method=auth_event_service.infer_method(user), event_type="login", status="success",
-        user=user, session_ref=_sid_from_token(access_token), user_agent=ua, ip=ip,
+@router.get("/me")
+def me(current_user: CurrentUser = Depends(get_current_user)):
+    return success_response(
+        MeOut(
+            email=current_user.email,
+            name=current_user.name,
+            role=current_user.role,
+            provider=current_user.provider,
+            csrf_token=current_user.csrf,
+        ),
+        "Current user",
     )
-    token = Token(access_token=access_token)
-    return success_response(token.model_dump(), "Login successful")
+
+
+@router.post("/logout", dependencies=[Depends(verify_csrf)])
+def logout():
+    # JWTs are otherwise stateless; there is no server-side revocation list.
+    # This only clears the browser's copy of the cookie.
+    response = success_response(None, "Logged out successfully")
+    response.delete_cookie(SESSION_COOKIE)
+    return response

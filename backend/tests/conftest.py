@@ -1,42 +1,33 @@
 import os
 
-os.environ.setdefault("DATABASE_URL", "sqlite:///./test.db")
-os.environ.setdefault("SECRET_KEY", "test-secret-key")
+os.environ.setdefault("SESSION_SECRET", "test-session-secret")
 os.environ.setdefault("ADMIN_EMAIL", "admin@example.com")
-os.environ.setdefault("ADMIN_PASSWORD", "admin-test-password")
 os.environ.setdefault("FRONTEND_URL", "http://localhost:5500")
+os.environ.setdefault("BACKEND_URL", "http://localhost:8000")
+
+import json
+import shutil
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
-from app.database.base import Base
-from app.database.database import get_db
+from app.core.dependencies import SESSION_COOKIE
+from app.core.security import create_session_token
+from app.data import store
 from app.main import app
-from app.models import *  # noqa: F401,F403 - register all models on Base.metadata
 
-TEST_DATABASE_URL = "sqlite:///./test.db"
-engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SEED_FILES = ["projects", "certificates", "experiences", "hackathons"]
 
 
-def override_get_db():
-    db = TestingSessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-app.dependency_overrides[get_db] = override_get_db
-
-
-@pytest.fixture(scope="function", autouse=True)
-def setup_database():
-    Base.metadata.create_all(bind=engine)
-    yield
-    Base.metadata.drop_all(bind=engine)
+@pytest.fixture(autouse=True)
+def isolated_data_dir(tmp_path, monkeypatch):
+    # Each test gets its own throwaway copy of app/data/*.json, so tests never
+    # touch (or depend on) the real content files and don't leak state between
+    # each other - the closest equivalent to the old per-test SQLite database.
+    for name in SEED_FILES:
+        shutil.copy(store.DATA_DIR / f"{name}.json", tmp_path / f"{name}.json")
+    monkeypatch.setattr(store, "DATA_DIR", tmp_path)
+    yield tmp_path
 
 
 @pytest.fixture()
@@ -48,10 +39,26 @@ def client():
         yield c
 
 
+def _login_as(client: TestClient, email: str, role: str, name: str = "Test User", provider: str = "google"):
+    token, csrf = create_session_token(email=email, name=name, role=role, provider=provider)
+    client.cookies.set(SESSION_COOKIE, token)
+    return csrf
+
+
 @pytest.fixture()
-def admin_token(client):
-    response = client.post(
-        "/api/auth/login",
-        json={"email": "admin@example.com", "password": "admin-test-password"},
-    )
-    return response.json()["data"]["access_token"]
+def admin_csrf(client):
+    """Logs `client` in as the admin (matching ADMIN_EMAIL) and returns the CSRF
+    token to attach as X-CSRF-Token on mutating requests - mirrors a real
+    frontend, which gets this value from GET /api/auth/me after OAuth login.
+    """
+    return _login_as(client, email="admin@example.com", role="admin")
+
+
+@pytest.fixture()
+def user_csrf(client):
+    return _login_as(client, email="visitor@example.com", role="user")
+
+
+def write_items(tmp_path, name: str, items: list[dict]) -> None:
+    with (tmp_path / f"{name}.json").open("w") as f:
+        json.dump(items, f, default=str)

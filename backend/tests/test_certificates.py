@@ -16,8 +16,8 @@ def test_create_certificate_requires_admin(client):
     assert response.status_code == 401
 
 
-def test_admin_can_manage_certificate_lifecycle(client, admin_token):
-    headers = {"Authorization": f"Bearer {admin_token}"}
+def test_admin_can_manage_certificate_lifecycle(client, admin_csrf):
+    headers = {"X-CSRF-Token": admin_csrf}
 
     create_res = client.post("/api/certificates", json=CERT_PAYLOAD, headers=headers)
     assert create_res.status_code == 201

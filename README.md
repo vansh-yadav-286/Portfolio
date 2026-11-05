@@ -257,29 +257,28 @@ jobs:
 
 ---
 
-## Project: Full-Stack Portfolio (FastAPI + PostgreSQL + Admin Dashboard)
+## Project: Full-Stack Portfolio (FastAPI + Admin Dashboard, no database)
 
 ### 1. Overview
 
-The portfolio is a three-part application: a static frontend, a FastAPI REST backend, and a PostgreSQL database, each in its own top-level folder with a single responsibility. Projects, certificates and contact messages are managed data (via an admin dashboard) instead of being hardcoded in the page.
+The portfolio is a two-part application: a static frontend and a FastAPI REST backend, each in its own top-level folder. There is no database. Projects, certificates, hackathons/workshops and experience entries live in JSON files inside the backend (`backend/app/data/`); auth is Google/GitHub OAuth only, with a signed, stateless session cookie instead of a user table; the contact form forwards by email instead of being stored.
 
 ### 2. Architecture
 
 ```
-Vercel (frontend project)          Vercel (backend project)
+Vercel (frontend project)          Render
 ┌────────────────┐   REST/JSON   ┌──────────────────────────────┐
-│   frontend/     │ ────────────▶ │  backend/  (FastAPI,           │
-│  HTML/CSS/JS    │ ◀──────────── │  served via api/index.py)      │
-└────────────────┘                │  routes → schemas → services  │
-                                   │           → models (SQLAlchemy)│
+│   frontend/     │ ────────────▶ │  backend/  (FastAPI)           │
+│  HTML/CSS/JS    │ ◀──────────── │  routes → schemas → services  │
+└────────────────┘                │       → app/data/*.json        │
                                    └───────────────┬───────────────┘
                                                     │
                                                     ▼
-                                          Supabase Postgres
-                                          schema in supabase/migrations/
+                                          Google / GitHub OAuth
+                                          (identity only - no accounts stored)
 ```
 
-Production flow: **Vercel (static) → HTML/CSS/JavaScript (`fetch()`) → FastAPI on Vercel (Python serverless) → SQLAlchemy (psycopg) → Supabase Postgres.** Nothing else is part of the production stack.
+Production flow: **Vercel (static) → HTML/CSS/JavaScript (`fetch()`, `credentials: 'include'`) → FastAPI on Render → `app/data/*.json`.** Nothing else is part of the production stack - no Postgres, no Supabase, no ORM.
 
 ### 3. Frontend (`frontend/`)
 
@@ -302,57 +301,39 @@ frontend/
     └── admin.js
 ```
 
-Projects and certificates are no longer hardcoded: `js/script.js` fetches them from `GET /api/projects` and `GET /api/certificates` and renders the same card markup the site always used. The contact form posts to `POST /api/contact`. A lightweight, PII-free page-visit ping goes to `POST /api/analytics/visit`.
+Projects and certificates are no longer hardcoded: `js/script.js` fetches them from `GET /api/projects` and `GET /api/certificates` and renders the same card markup the site always used. The contact form posts to `POST /api/contact`, which forwards the message by email - nothing is stored or listed anywhere.
 
 ### 4. Backend (`backend/`)
 
-Python + FastAPI, deployed on **Vercel** as a Python serverless function (Supabase hosts the database only). See [`backend/README.md`](backend/README.md) for the full architecture, local dev, testing and deployment steps.
+Python + FastAPI, deployed on **Render** as a normal persistent web service (not Vercel/serverless - the OAuth flow and rate limiter assume one long-lived process). See [`backend/README.md`](backend/README.md) for the full architecture, local dev, testing and deployment steps.
 
 ```
 backend/app/
-├── main.py             # app wiring: CORS, exception handlers, routers, lifespan
-├── core/                # config, JWT/password security, auth dependencies, rate limiting
-├── routes/              # auth, projects, certificates, contact, analytics
-├── services/            # business logic
+├── main.py             # app wiring: CORS, exception handlers, routers
+├── core/                # config, session/CSRF security, auth dependencies, rate limiting
+├── routes/              # auth, projects, certificates, experiences, hackathons, contact
+├── services/            # business logic (reads/writes app/data/*.json, sends contact email)
 ├── schemas/             # Pydantic request/response models
-├── models/              # SQLAlchemy ORM models
-├── database/            # engine/session + declarative Base
+├── data/                # the content itself - JSON files - plus store.py's read/write helpers
 └── utils/               # shared helpers (response envelope)
-backend/tests/           # pytest, one file per resource — 20 tests, all passing
+backend/tests/           # pytest, one file per resource — 63 tests, all passing
 ```
 
-### 5. Database (`database/`)
+### 5. Content storage (`backend/app/data/`)
 
-PostgreSQL, versioned with Alembic. SQLAlchemy models live in `backend/app/models/` (the application layer); this folder holds the database's own artifacts only. See [`database/docs/database.md`](database/docs/database.md).
-
-```
-database/
-├── migrations/alembic/   # Alembic env + versioned migrations
-├── schemas/schema.sql     # reference DDL (documentation)
-├── seeds/seed.sql          # initial projects + certificates data
-└── docs/database.md
-```
+No database anywhere. `projects.json`, `certificates.json`, `experiences.json` and `hackathons.json` **are** the content; `app/data/store.py` reads/writes them with an atomic temp-file-then-rename pattern. See [`backend/app/data/README.md`](backend/app/data/README.md) for the shape of each file and an important caveat: **writes made through the admin dashboard do not survive a Render redeploy** (the filesystem resets). Treat the admin editor as a drafting tool, not a live CMS, unless you also commit the updated JSON file back to the repo.
 
 ### 6. Setup
 
 ```bash
-# 1. Database
-createdb portfolio_db   # or use a managed Postgres instance
-
-# 2. Backend
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env    # fill in DATABASE_URL, SECRET_KEY, ADMIN_EMAIL, ADMIN_PASSWORD, ...
+cp .env.example .env    # fill in SESSION_SECRET, ADMIN_EMAIL, Google/GitHub OAuth creds, SMTP creds
 
-cd ../database
-alembic upgrade head
-psql "$DATABASE_URL" -f seeds/seed.sql   # optional sample data
-
-cd ../backend
 uvicorn app.main:app --reload           # http://localhost:8000, docs at /docs
 
-# 3. Frontend
+# Frontend, in another terminal
 cd ../frontend
 python3 -m http.server 5500             # http://localhost:5500
 ```
@@ -361,25 +342,33 @@ python3 -m http.server 5500             # http://localhost:5500
 
 `backend/.env.example`:
 ```
-DATABASE_URL=postgresql+psycopg://username:password@localhost:5432/portfolio_db
-SECRET_KEY=change_this_secret
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=60
+SESSION_SECRET=change_this_to_a_long_random_value
+SESSION_MAX_AGE_MINUTES=120
 FRONTEND_URL=http://localhost:5500
 ADMIN_EMAIL=admin@example.com
-ADMIN_PASSWORD=change_this_password
+BACKEND_URL=http://localhost:8000
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USERNAME=
+SMTP_PASSWORD=
+CONTACT_EMAIL_TO=
+CONTACT_EMAIL_FROM=
 ```
-Never commit a real `.env`. The admin account is created automatically on backend startup from `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
+Never commit a real `.env`. There is no admin password to seed: whichever Google/GitHub account authenticates with the exact (provider-verified) `ADMIN_EMAIL` is granted the admin role on login.
 
-`FRONTEND_URL` takes a comma-separated list of allowed origins, for example `https://<your-project>.vercel.app,http://localhost:5500`. CORS allows only these origins. In production, set `DATABASE_URL` (pointing at Supabase's pooled Postgres connection string), `SECRET_KEY`, `FRONTEND_URL`, `ADMIN_EMAIL` and `ADMIN_PASSWORD` in the backend's Vercel project dashboard. Never put their values in this repo.
+`FRONTEND_URL` takes a comma-separated list of allowed origins, for example `https://<your-project>.vercel.app,http://localhost:5500`. CORS allows only these origins - this is required, not just good practice, for the cross-site session cookie to work at all. In production, set all of the above in the Render dashboard. Never put their values in this repo.
 
 ### 8. Authentication
 
-FastAPI + OAuth2PasswordBearer + JWT (HS256) + bcrypt password hashing. `POST /api/auth/register` creates a regular (`user`-role) account; the seeded admin account is the only `admin`-role user. Admin-only routes (managing projects/certificates/contact messages/analytics) are protected by a role dependency. `/api/auth/login` is rate-limited against brute-force attempts. See [`backend/README.md`](backend/README.md) for the full route table.
+Google and GitHub OAuth only - no passwords, no user table, no Supabase Auth. A successful login issues a signed, stateless session as an **HttpOnly** cookie; its claims (email, name, role, provider) are trusted as-is on every later request, nothing is looked up server-side. `role` is decided once, at login, by comparing the provider-verified email against `ADMIN_EMAIL` (case-insensitive); an unverified email is never trusted. Mutating admin requests must also echo a CSRF token (from `GET /api/auth/me`) as `X-CSRF-Token` - required because the cookie is sent cross-site (`SameSite=None` in production, since the frontend and backend are different origins), which on its own gives no CSRF protection. See [`backend/README.md`](backend/README.md) for the full route table and the tradeoffs of dropping a database from auth.
 
 ### 9. Admin dashboard
 
-`frontend/admin/` — Overview (stats), Projects (CRUD, mark featured), Certificates (CRUD), Contact Messages (view, change status, delete), Analytics (visitor counts, top pages), Logout. Logs in against `POST /api/auth/login` with the seeded admin credentials; the JWT is stored in the browser and sent as `Authorization: Bearer <token>` on every admin request.
+`frontend/admin/` — Overview (content counts), Projects (CRUD), Certificates (CRUD), Workshop & Hackathons (CRUD, visibility toggle), Experience (CRUD), Logout. Logs in via the same Google/GitHub buttons as the public site; the session cookie (not a token in browser storage) authorizes every admin request. There is no Contact Messages, Analytics, or User Activity & Reports tab any more - none of that had anywhere to persist once the database was removed.
 
 ### 10. Testing
 
@@ -387,29 +376,34 @@ FastAPI + OAuth2PasswordBearer + JWT (HS256) + bcrypt password hashing. `POST /a
 cd backend
 pytest
 ```
-20 tests covering registration, login (valid/invalid), protected-route access, project CRUD, certificate CRUD, contact form submission/validation, and admin-only authorization checks. Tests run against a throwaway SQLite database, independent of your dev Azure Postgres instance.
+63 tests covering OAuth login/callback (mocked provider calls), session/CSRF behavior, project/certificate/experience/hackathon CRUD against the JSON store, contact-form email forwarding (mocked SMTP), and CORS/rate-limiting. Each test runs against its own throwaway copy of `app/data/*.json` (see `tests/conftest.py`), independent of your real content files.
 
 ### 11. Deployment
 
-**Frontend → Vercel (primary).** Import this repo into Vercel as its own project with **Root Directory = `frontend`**. It's plain static HTML/CSS/JS with no build step, so leave the build command empty. After deploying the backend, update `API_BASE_URL` in `frontend/js/config.js` to the backend's Vercel URL and redeploy.
+**Frontend → Vercel.** Import this repo into Vercel as its own project with **Root Directory = `frontend`**. It's plain static HTML/CSS/JS with no build step, so leave the build command empty. After deploying the backend, update `API_BASE_URL` in `frontend/js/config.js` to the backend's Render URL and redeploy.
 
-**Database → Supabase Postgres.** Create a Supabase project, then apply `supabase/migrations/0001_init.sql` against it (`supabase db push`, or `psql "$SUPABASE_DB_URL" -f supabase/migrations/0001_init.sql`). Full steps, including migrating existing data, in [`backend/README.md`](backend/README.md).
+**Backend → Render.** `render.yaml` at the repo root is a ready-to-use Blueprint - a single web service, no database:
+```
+buildCommand: pip install -r backend/requirements.txt
+startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+```
+1. Push this repo to GitHub, then in Render create a new Blueprint from `render.yaml`.
+2. Set `SESSION_SECRET`, `FRONTEND_URL` (the frontend's Vercel origin, plus `http://localhost:5500` for local dev), `ADMIN_EMAIL`, `BACKEND_URL`, the Google/GitHub OAuth client vars, and the SMTP vars in the Render dashboard — none of these are provisioned automatically. Full steps in [`backend/README.md`](backend/README.md).
+3. Update the OAuth redirect URIs registered with Google/GitHub to use the real Render URL once you have it.
 
-**Backend → Vercel (Python serverless).** Supabase only runs Postgres + Edge Functions, not a persistent FastAPI process, so the API itself is a second Vercel project with **Root Directory = `backend`**; `backend/vercel.json` routes every request to `backend/api/index.py`, a thin wrapper around the existing FastAPI app — no route code changed. Set `DATABASE_URL` (Supabase's **pooled**, port-6543 connection string — see `backend/.env.example` for why), `SECRET_KEY`, `ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `FRONTEND_URL` (the frontend's Vercel origin, comma-separated with `http://localhost:5500` for local dev), `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `BACKEND_URL`, and the OAuth client vars in that Vercel project's dashboard — nothing is provisioned automatically. Full steps in [`backend/README.md`](backend/README.md).
-
-One known limitation: `/api/auth/login`'s rate limiting (slowapi) uses in-memory storage, which doesn't persist or share state across separate serverless instances on Vercel. For this portfolio's traffic that's an acceptable tradeoff rather than adding a Redis dependency — see `backend/README.md` for detail.
+After deploying, update `API_BASE_URL` in `frontend/js/config.js` to the Render URL. `GET /health` is a plain liveness check now - there's no database to probe.
 
 ### 12. Security
 
-Bcrypt password hashing; JWT auth with role-based admin authorization; CORS restricted to the origins listed in `FRONTEND_URL` (never `*`); centralized exception handling so stack traces/DB errors are never returned to the client; rate limiting on login; Pydantic validation on every request body; no secrets or `.env` files committed.
+Google/GitHub OAuth with provider-verified email required (never trusts an unverified address); signed, stateless, HttpOnly session cookies (never in `localStorage`/`sessionStorage`, never readable by page scripts); CSRF token required on every mutating admin request; CORS restricted to the origins listed in `FRONTEND_URL` (never `*` - required for the cookie to work cross-site at all); centralized exception handling so stack traces are never returned to the client; rate limiting on login and the contact form; Pydantic validation on every request body; no secrets or `.env` files committed.
 
-### 13. Visitor login (backend-backed)
+### 13. Visitor login
 
-The login and signup screens call the FastAPI backend: `POST /api/auth/register` and `POST /api/auth/login`. Visitor accounts are stored in PostgreSQL (the `users` table, `user` role). Passwords are sent over HTTPS only. They are never hashed or stored in the browser.
+The login screen's two buttons navigate the whole page to the backend's `GET /api/auth/{google,github}/login`, which redirects to the provider's consent screen and back. The callback sets the session cookie directly on its redirect response and sends the browser to `/?oauth=success` - no token or code ever appears in a URL, browser history, or Referer header. The frontend then calls `GET /api/auth/me` (cookie sent automatically) to learn who logged in.
 
-After a successful login the browser stores one flag in localStorage, `portfolioAuth = { user, ts }`. `index.html` reads it before first paint to choose between the login screen and the portfolio. The flag holds no password and no token. It only controls which screen is drawn, so it is not a security boundary: the portfolio content is public anyway, and the admin dashboard is protected by the backend's JWT and admin-role check.
+After that, the browser stores one flag in localStorage, `portfolioAuth = { user, ts }`. `index.html` reads it before first paint to choose between the login screen and the portfolio. The flag holds no password and no token - it only controls which screen is drawn, so it is not a security boundary: the portfolio content is public anyway, and the admin dashboard is protected by the backend's session cookie and admin-role check instead.
 
-Google and Apple sign-in (Firebase) has been removed. No Firebase code, config or packages remain.
+Email/password login and signup have been removed entirely - they can't exist without a database to check a password against. Google and Apple sign-in via Firebase was removed in an earlier restructure and was never reintroduced.
 
 ### 14. Cleanup performed during this restructure
 

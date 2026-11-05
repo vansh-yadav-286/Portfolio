@@ -1,20 +1,6 @@
-import hashlib
-import secrets
-from datetime import datetime, timedelta, timezone
-from typing import Optional
-from urllib.parse import urlencode
-
 import httpx
-from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.models.oauth_login_code import OAuthLoginCode
-from app.models.user import User, UserRole
-
-# How long a one-time login code (see create_login_code/consume_login_code)
-# stays redeemable. It only ever needs to survive one redirect hop from the
-# backend callback to the frontend, which then immediately exchanges it.
-LOGIN_CODE_TTL_SECONDS = 60
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -49,6 +35,8 @@ def github_redirect_uri() -> str:
 
 
 def build_google_authorize_url(state: str) -> str:
+    from urllib.parse import urlencode
+
     params = {
         "client_id": settings.google_client_id,
         "redirect_uri": google_redirect_uri(),
@@ -62,6 +50,8 @@ def build_google_authorize_url(state: str) -> str:
 
 
 def build_github_authorize_url(state: str) -> str:
+    from urllib.parse import urlencode
+
     params = {
         "client_id": settings.github_client_id,
         "redirect_uri": github_redirect_uri(),
@@ -165,102 +155,3 @@ def fetch_github_profile(access_token: str) -> dict:
         "email_verified": email_verified,
         "name": user.get("name") or user.get("login") or "GitHub User",
     }
-
-
-def find_or_create_oauth_user(db: Session, provider: str, profile: dict) -> tuple[User, bool]:
-    """Returns (user, created). `created` is True only when a brand-new row was
-    inserted - callers use it to record exactly one signup event per account,
-    never once per callback (a retried/duplicated callback for an identity that
-    already exists just logs that identity in again, not a second signup).
-    """
-    provider_id = profile["provider_id"]
-    email = (profile.get("email") or "").strip().lower()
-    if not email:
-        raise OAuthError("Your account has no email address we can use to sign you in.")
-
-    user = (
-        db.query(User)
-        .filter(User.oauth_provider == provider, User.oauth_provider_id == provider_id)
-        .first()
-    )
-    if user:
-        return user, False
-
-    existing = db.query(User).filter(User.email == email).first()
-    if existing:
-        if existing.oauth_provider and existing.oauth_provider != provider:
-            raise OAuthError(
-                "This email is already linked to a different sign-in method. "
-                "Please use that method to log in."
-            )
-        if not profile.get("email_verified"):
-            # Email strings matching isn't proof of ownership on its own - only link
-            # accounts when the provider itself has verified the address.
-            raise OAuthError(
-                "An account with this email already exists. Please log in with your "
-                "password instead."
-            )
-        existing.oauth_provider = provider
-        existing.oauth_provider_id = provider_id
-        existing.email_verified = True
-        db.commit()
-        db.refresh(existing)
-        return existing, False
-
-    user = User(
-        name=profile.get("name") or "New User",
-        email=email,
-        password_hash=None,
-        role=UserRole.user,
-        oauth_provider=provider,
-        oauth_provider_id=provider_id,
-        # Honest because it's a fact we actually have: the provider told us this
-        # address is verified. Never set True for a password signup - we never
-        # verify those.
-        email_verified=bool(profile.get("email_verified")),
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return user, True
-
-
-def _hash_code(raw_code: str) -> str:
-    return hashlib.sha256(raw_code.encode()).hexdigest()
-
-
-def create_login_code(db: Session, user: User) -> str:
-    """Mints a one-time code the OAuth callback can hand to the browser in a
-    redirect. The code is NOT a session credential by itself - it only lets
-    the holder call /api/auth/oauth/exchange once, within LOGIN_CODE_TTL_SECONDS,
-    to receive the real JWT. This keeps the access token itself out of the URL.
-    """
-    raw_code = secrets.token_urlsafe(32)
-    db.add(
-        OAuthLoginCode(
-            code_hash=_hash_code(raw_code),
-            user_id=user.id,
-            expires_at=datetime.now(timezone.utc) + timedelta(seconds=LOGIN_CODE_TTL_SECONDS),
-        )
-    )
-    db.commit()
-    return raw_code
-
-
-def consume_login_code(db: Session, raw_code: str) -> Optional[User]:
-    """Redeems a one-time login code, returning the user it was issued for.
-    The backing row is deleted whether or not it was still valid, so a code
-    can never be used twice (and expired rows don't pile up over time).
-    """
-    now = datetime.now(timezone.utc)
-    db.query(OAuthLoginCode).filter(OAuthLoginCode.expires_at < now).delete()
-
-    row = db.query(OAuthLoginCode).filter(OAuthLoginCode.code_hash == _hash_code(raw_code)).first()
-    if not row:
-        db.commit()
-        return None
-
-    user = db.query(User).filter(User.id == row.user_id).first()
-    db.delete(row)
-    db.commit()
-    return user

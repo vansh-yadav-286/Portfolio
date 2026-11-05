@@ -913,27 +913,6 @@ function initContact() {
 }
 
 // cmd/ctrl+k palette
-// Fire-and-forget page-visit ping for the admin dashboard's analytics tab.
-// No PII: the backend only stores a session id, page path, referrer, user
-// agent and a salted hash of the IP (see analytics_service.hash_ip).
-function initAnalytics() {
-  const SESSION_KEY = 'portfolioAnalyticsSession';
-  let sessionId = safeStorage.get(SESSION_KEY);
-  if (!sessionId) {
-    sessionId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now());
-    safeStorage.set(SESSION_KEY, sessionId);
-  }
-  fetch(`${API_BASE_URL}/api/analytics/visit`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      session_id: sessionId,
-      page: window.location.pathname || '/',
-      referrer: document.referrer || null
-    })
-  }).catch((err) => console.error('[analytics] visit ping failed:', err));
-}
-
 function initCommandPalette() {
   const overlay = $('#command-overlay');
   const input = $('#command-input');
@@ -1383,22 +1362,23 @@ function initProjectModal() {
 
 
 // =====================================================================
-// AUTH (visitor login / signup / logout)
-// Accounts live in the FastAPI + PostgreSQL backend: POST /api/auth/register
-// and POST /api/auth/login. Passwords are sent to the backend over HTTPS only;
-// they are never stored or checked in the browser.
+// AUTH (Google / GitHub OAuth only - no passwords, no database)
+// The backend issues a signed, stateless session as an HttpOnly cookie on
+// successful OAuth login - it is never readable by JS and never stored in
+// localStorage/sessionStorage. Every authenticated fetch() must therefore
+// pass `credentials: 'include'` so the browser attaches that cookie.
 // The browser keeps just a "logged in" flag, localStorage 'portfolioAuth' = { user, ts }.
 // index.html reads it in <head> so the right screen shows before first paint.
 // That flag only chooses which screen is drawn. It is not a security boundary:
 // the public portfolio content is served to everyone. The admin dashboard is
-// protected by the backend's JWT and admin-role check instead.
+// protected by the backend's cookie session and admin-role check instead.
 // =====================================================================
 const AUTH_KEY = 'portfolioAuth';
-// The JWT itself lives in sessionStorage (cleared when the tab closes, never
-// shared with other tabs) - same approach as the admin dashboard's token.
-// AUTH_KEY above only controls which screen is drawn (see the comment block
-// above); this token is what actually proves identity to the backend.
-const AUTH_TOKEN_KEY = 'portfolioAuthToken';
+// Mutating requests (just logout, here) must echo this back as X-CSRF-Token.
+// It comes from GET /api/auth/me - a forged cross-site request has no way to
+// read that response, so it can't supply the matching value. Kept in memory
+// only (not storage): a page reload re-fetches it from /me.
+let csrfToken = null;
 
 function checkAuth() {
   try {
@@ -1411,26 +1391,14 @@ function startSession(user) {
   window.localStorage.setItem(AUTH_KEY, JSON.stringify({ user, ts: Date.now() }));
 }
 
-function getAuthToken() {
-  try { return window.sessionStorage.getItem(AUTH_TOKEN_KEY); } catch (e) { return null; }
-}
-
-function setAuthToken(token) {
-  try { window.sessionStorage.setItem(AUTH_TOKEN_KEY, token); } catch (e) { /* storage blocked */ }
-}
-
-function clearAuthToken() {
-  try { window.sessionStorage.removeItem(AUTH_TOKEN_KEY); } catch (e) { /* ignore */ }
-}
-
-// GET /api/auth/me with the given bearer token. Used to derive the signed-in
-// user's identity from a backend-verified token - never from a URL parameter.
-async function fetchAuthenticatedUser(token) {
+// GET /api/auth/me using the session cookie. Used to derive the signed-in
+// user's identity from a backend-verified session - never from a URL parameter.
+async function fetchAuthenticatedUser() {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
-      headers: { Authorization: `Bearer ${token}` },
+      credentials: 'include',
       signal: controller.signal
     });
     let json = null;
@@ -1445,48 +1413,22 @@ async function fetchAuthenticatedUser(token) {
   }
 }
 
-// Maps a backend failure to a message that is safe to show the visitor.
-function authErrorMessage(status, json) {
-  if (status === 429) return 'Too many attempts. Please wait a moment and try again.';
-  if (status === 422) return 'Please check the details you entered and try again.';
-  if (status < 500 && json && typeof json.message === 'string') return json.message;
-  return 'Something went wrong. Please try again.';
-}
-
-// POST /api/auth/login or /api/auth/register. Resolves with the envelope's data,
-// rejects with a message that is safe to show.
-async function postAuth(path, body) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+async function logout() {
   try {
-    const res = await fetch(`${API_BASE_URL}${path}`, {
+    if (!csrfToken) {
+      // A reload can lose the in-memory CSRF token even though the session
+      // cookie itself is still valid - refetch it so logout still works.
+      const me = await fetchAuthenticatedUser();
+      csrfToken = me.csrf_token;
+    }
+    await fetch(`${API_BASE_URL}/api/auth/logout`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: controller.signal
+      credentials: 'include',
+      headers: { 'X-CSRF-Token': csrfToken }
     });
-    let json = null;
-    try { json = await res.json(); } catch (e) { /* non-JSON response */ }
-    if (!res.ok || !json || json.success === false) throw new Error(authErrorMessage(res.status, json));
-    return json.data;
-  } catch (err) {
-    if (err.name === 'AbortError') throw new Error('The server took too long to respond. Please try again.');
-    if (err instanceof TypeError) throw new Error('Could not reach the server. Check your connection and try again.');
-    throw err;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-function setFormBusy(form, busy) {
-  const submit = $('button[type="submit"]', form);
-  if (submit) submit.disabled = busy;
-  form.setAttribute('aria-busy', String(busy));
-}
-
-function logout() {
+  } catch (e) { /* best-effort: clear the local flag regardless */ }
   try { window.localStorage.removeItem(AUTH_KEY); } catch (e) { /* ignore */ }
-  clearAuthToken();
+  csrfToken = null;
   // drop the hash + reload so the portfolio (and all its listeners) is torn down
   window.location.replace(window.location.pathname + window.location.search);
 }
@@ -1505,33 +1447,15 @@ function initAuth() {
   });
 
   const loginView = $('#login-view');
-  const signupView = $('#signup-view');
-  if (!loginView || !signupView) return;
+  if (!loginView) return;
 
-  const loginForm = $('#login-form');
-  const signupForm = $('#signup-form');
   const loginError = $('#login-error');
-  const signupError = $('#signup-error');
   const notice = $('#login-notice');
 
-  function showLogin(msg) {
-    signupView.hidden = true;
-    loginView.hidden = false;
-    loginError.textContent = '';
-    notice.hidden = !msg;
-    notice.textContent = msg || '';
-    $('input[name="email"]', loginForm).focus();
-  }
-  function showSignup() {
-    loginView.hidden = true;
-    signupView.hidden = false;
-    signupError.textContent = '';
+  function showLoginError(msg) {
+    loginError.textContent = msg || '';
     notice.hidden = true;
-    $('input[name="name"]', signupForm).focus();
   }
-
-  $('#show-signup').addEventListener('click', (e) => { e.preventDefault(); showSignup(); });
-  $('#show-login').addEventListener('click', (e) => { e.preventDefault(); showLogin(); });
 
   // Google / GitHub: full-page redirect to the backend, which redirects to the
   // provider's consent screen and back. Can't be a fetch() - the consent UI
@@ -1544,110 +1468,33 @@ function initAuth() {
     });
   });
 
-  // Coming back from a backend OAuth redirect: ?oauth=success&code=<one-time
-  // code> on success, or ?oauth_error=<message> if it failed/was cancelled.
-  // The code is not a session by itself and carries no identity claim - it
-  // must be exchanged for a real, backend-issued JWT, and the signed-in
-  // user's identity comes from that token (via /api/auth/me), never from a
-  // URL parameter.
+  // Coming back from a backend OAuth redirect: ?oauth=success (the session
+  // cookie is already set, directly on that redirect response) or
+  // ?oauth_error=<message> if it failed/was cancelled. Identity always comes
+  // from GET /api/auth/me (which reads the cookie), never from a URL parameter.
   (async function handleOAuthRedirect() {
     const params = new URLSearchParams(window.location.search);
     const oauthError = params.get('oauth_error');
-    const code = params.get('code');
     if (!params.has('oauth') && !oauthError) return;
 
-    // Strip the query before anything else runs, so the one-time code never
-    // sits in the address bar/history and isn't sent in the Referer header
-    // of the exchange request below.
+    // Strip the query before anything else runs, matching the backend's own
+    // care not to leave anything OAuth-related sitting in the address bar.
     window.history.replaceState({}, '', window.location.pathname + window.location.hash);
 
-    if (params.get('oauth') === 'success' && code) {
-      setFormBusy(loginForm, true);
+    if (params.get('oauth') === 'success') {
       try {
-        const tokenData = await postAuth('/api/auth/oauth/exchange', { code });
-        const me = await fetchAuthenticatedUser(tokenData.access_token);
-        setAuthToken(tokenData.access_token);
+        const me = await fetchAuthenticatedUser();
+        csrfToken = me.csrf_token;
         startSession(me.email);
       } catch (err) {
-        setFormBusy(loginForm, false);
-        clearAuthToken();
-        showLogin();
-        loginError.textContent = err.message || 'Could not complete login. Please try again.';
+        showLoginError(err.message || 'Could not complete login. Please try again.');
         return;
       }
       window.location.reload();
     } else if (oauthError) {
-      showLogin();
-      loginError.textContent = oauthError;
+      showLoginError(oauthError);
     }
   })();
-
-  // show/hide password (login + signup fields)
-  $$('.auth__eye').forEach((eye) => {
-    const input = $('input', eye.closest('.auth__field'));
-    eye.addEventListener('click', () => {
-      const show = input.type === 'password';
-      input.type = show ? 'text' : 'password';
-      eye.setAttribute('aria-pressed', String(show));
-      eye.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
-    });
-  });
-
-  loginForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const data = new FormData(loginForm);
-    const email = String(data.get('email') || '').trim().toLowerCase();
-    const password = String(data.get('password') || '');
-    if (!email || !password) { loginError.textContent = 'Enter your email and password.'; return; }
-
-    loginError.textContent = '';
-    setFormBusy(loginForm, true);
-    let tokenData;
-    try {
-      tokenData = await postAuth('/api/auth/login', { email, password });
-    } catch (err) {
-      setFormBusy(loginForm, false);
-      loginError.textContent = err.message;
-      return;
-    }
-    try {
-      setAuthToken(tokenData.access_token);
-      startSession(email);
-    } catch (err) {
-      setFormBusy(loginForm, false);
-      clearAuthToken();
-      loginError.textContent = 'Your browser is blocking storage, so login can’t be saved.';
-      return;
-    }
-    window.location.reload();
-  });
-
-  signupForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const data = new FormData(signupForm);
-    const name = String(data.get('name') || '').trim();
-    const email = String(data.get('email') || '').trim().toLowerCase();
-    const password = String(data.get('password') || '');
-
-    if (name.length < 2) { signupError.textContent = 'Please enter your full name.'; return; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { signupError.textContent = 'Please enter a valid email address.'; return; }
-    if (password.length < 8) { signupError.textContent = 'Password must be at least 8 characters.'; return; }
-
-    signupError.textContent = '';
-    setFormBusy(signupForm, true);
-    try {
-      await postAuth('/api/auth/register', { name, email, password });
-    } catch (err) {
-      setFormBusy(signupForm, false);
-      signupError.textContent = err.message;
-      return;
-    }
-    setFormBusy(signupForm, false);
-    signupForm.reset();
-    showLogin('Account created! Log in with your email and password.');
-    $('input[name="email"]', loginForm).value = email;
-    $('input[name="password"]', loginForm).focus();
-  });
 }
 
 // ---- boot it up ----
@@ -1668,7 +1515,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initNeuralCanvas, initBootRain, initRoleTypewriter,
     initHackathons,
     initGithubStats, initCertificates, initProjects, initContact, initCommandPalette, initAIWidget,
-    initTheme, initMusicToggle, initDevMode, initAnalytics
+    initTheme, initMusicToggle, initDevMode
   ];
   modules.forEach((fn) => {
     try { fn(); }

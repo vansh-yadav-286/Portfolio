@@ -1,41 +1,31 @@
-from sqlalchemy.orm import Session
+from datetime import datetime, timezone
 
-from app.models.certificate import Certificate
+from app.data import store
 from app.schemas.certificate import CertificateCreate, CertificateUpdate
-from app.utils.helpers import api_error
+
+STORE = "certificates"
 
 
-def list_certificates(db: Session) -> list[Certificate]:
-    return db.query(Certificate).order_by(Certificate.display_order.asc(), Certificate.id.asc()).all()
+def list_certificates() -> list[dict]:
+    items = store.read_all(STORE)
+    return sorted(items, key=lambda c: (c["display_order"], c["id"]))
 
 
-def get_certificate(db: Session, certificate_id: int) -> Certificate:
-    certificate = db.get(Certificate, certificate_id)
-    if certificate is None:
-        raise api_error("Certificate not found", status_code=404)
-    return certificate
+def get_certificate(certificate_id: int) -> dict:
+    return store.get_one(STORE, certificate_id, "Certificate not found")
 
 
-def create_certificate(db: Session, payload: CertificateCreate) -> Certificate:
-    certificate = Certificate(**payload.model_dump())
-    db.add(certificate)
-    db.commit()
-    db.refresh(certificate)
-    return certificate
+def create_certificate(payload: CertificateCreate) -> dict:
+    now = datetime.now(timezone.utc)
+    data = {**payload.model_dump(), "created_at": now, "updated_at": now}
+    return store.create(STORE, data)
 
 
-def update_certificate(
-    db: Session, certificate_id: int, payload: CertificateUpdate
-) -> Certificate:
-    certificate = get_certificate(db, certificate_id)
-    for field, value in payload.model_dump(exclude_unset=True).items():
-        setattr(certificate, field, value)
-    db.commit()
-    db.refresh(certificate)
-    return certificate
+def update_certificate(certificate_id: int, payload: CertificateUpdate) -> dict:
+    changes = payload.model_dump(exclude_unset=True)
+    changes["updated_at"] = datetime.now(timezone.utc)
+    return store.update(STORE, certificate_id, changes, "Certificate not found")
 
 
-def delete_certificate(db: Session, certificate_id: int) -> None:
-    certificate = get_certificate(db, certificate_id)
-    db.delete(certificate)
-    db.commit()
+def delete_certificate(certificate_id: int) -> None:
+    store.delete(STORE, certificate_id, "Certificate not found")

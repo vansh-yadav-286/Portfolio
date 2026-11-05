@@ -19,8 +19,21 @@ def test_create_project_requires_admin(client):
     assert response.status_code == 401
 
 
-def test_admin_can_create_list_update_delete_project(client, admin_token):
-    headers = {"Authorization": f"Bearer {admin_token}"}
+def test_create_project_requires_csrf_header(client, admin_csrf):
+    # admin_csrf logs `client` in but this request deliberately omits the header.
+    response = client.post("/api/projects", json=PROJECT_PAYLOAD)
+    assert response.status_code == 403
+
+
+def test_non_admin_cannot_create_project(client, user_csrf):
+    response = client.post(
+        "/api/projects", json=PROJECT_PAYLOAD, headers={"X-CSRF-Token": user_csrf}
+    )
+    assert response.status_code == 403
+
+
+def test_admin_can_create_list_update_delete_project(client, admin_csrf):
+    headers = {"X-CSRF-Token": admin_csrf}
 
     create_res = client.post("/api/projects", json=PROJECT_PAYLOAD, headers=headers)
     assert create_res.status_code == 201
@@ -51,7 +64,8 @@ def test_get_nonexistent_project_returns_404(client):
     assert response.status_code == 404
 
 
-def test_create_project_validates_input(client, admin_token):
-    headers = {"Authorization": f"Bearer {admin_token}"}
-    response = client.post("/api/projects", json={"title": ""}, headers=headers)
+def test_create_project_validates_input(client, admin_csrf):
+    response = client.post(
+        "/api/projects", json={"title": ""}, headers={"X-CSRF-Token": admin_csrf}
+    )
     assert response.status_code == 422

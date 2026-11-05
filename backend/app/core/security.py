@@ -7,36 +7,35 @@ import time
 from datetime import datetime, timedelta, timezone
 
 import jwt
-from passlib.context import CryptContext
 
 from app.core.config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def create_session_token(email: str, name: str, role: str, provider: str) -> tuple[str, str]:
+    """Issues a signed, stateless session token (no server-side storage - there is
+    no database). Returns (token, csrf). `csrf` is also embedded in the token so a
+    later request can be checked against it without looking anything up - see
+    core/dependencies.py::verify_csrf.
+    """
+    csrf = secrets.token_urlsafe(24)
+    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.session_max_age_minutes)
+    payload = {
+        "sub": email,
+        "name": name,
+        "role": role,
+        "provider": provider,
+        "csrf": csrf,
+        "exp": expire,
+    }
+    token = jwt.encode(payload, settings.session_secret, algorithm="HS256")
+    return token, csrf
 
 
-def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
-
-
-def verify_password(plain_password: str, password_hash: str) -> bool:
-    return pwd_context.verify(plain_password, password_hash)
-
-
-def create_access_token(subject: str, role: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(
-        minutes=settings.access_token_expire_minutes
-    )
-    # "sid" is just a random correlation id, not a secret - it lets the activity
-    # log pair a login event with the logout that ends it, without storing the token.
-    payload = {"sub": subject, "role": role, "exp": expire, "sid": secrets.token_urlsafe(16)}
-    return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
-
-
-def decode_access_token(token: str) -> dict:
+def decode_session_token(token: str) -> dict:
     try:
-        return jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        return jwt.decode(token, settings.session_secret, algorithms=["HS256"])
     except jwt.InvalidTokenError as exc:
-        raise ValueError("Invalid or expired token") from exc
+        raise ValueError("Invalid or expired session") from exc
 
 
 def sign_oauth_state(data: dict) -> str:
@@ -48,7 +47,7 @@ def sign_oauth_state(data: dict) -> str:
     """
     payload = {**data, "iat": int(time.time())}
     body = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()).decode().rstrip("=")
-    signature = hmac.new(settings.secret_key.encode(), body.encode(), hashlib.sha256).hexdigest()
+    signature = hmac.new(settings.session_secret.encode(), body.encode(), hashlib.sha256).hexdigest()
     return f"{body}.{signature}"
 
 
@@ -58,7 +57,7 @@ def verify_oauth_state(token: str, max_age_seconds: int) -> dict:
     except ValueError as exc:
         raise ValueError("Malformed OAuth state") from exc
 
-    expected_signature = hmac.new(settings.secret_key.encode(), body.encode(), hashlib.sha256).hexdigest()
+    expected_signature = hmac.new(settings.session_secret.encode(), body.encode(), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(signature, expected_signature):
         raise ValueError("Invalid OAuth state signature")
 

@@ -1,48 +1,38 @@
-from sqlalchemy.orm import Session
+from datetime import datetime, timezone
 
-from app.models.experience import Experience
+from app.data import store
 from app.schemas.experience import ExperienceCreate, ExperienceUpdate
 from app.utils.helpers import api_error
+
+STORE = "experiences"
 
 # Columns that can never be cleared to null.
 REQUIRED_FIELDS = {"title", "organization", "experience_type", "description", "is_current", "display_order"}
 
 
-def _ordered(query):
-    return query.order_by(Experience.display_order.asc(), Experience.id.asc())
+def list_experiences() -> list[dict]:
+    items = store.read_all(STORE)
+    return sorted(items, key=lambda e: (e["display_order"], e["id"]))
 
 
-def list_experiences(db: Session) -> list[Experience]:
-    return _ordered(db.query(Experience)).all()
+def get_experience(experience_id: int) -> dict:
+    return store.get_one(STORE, experience_id, "Experience not found")
 
 
-def get_experience(db: Session, experience_id: int) -> Experience:
-    item = db.get(Experience, experience_id)
-    if item is None:
-        raise api_error("Experience not found", status_code=404)
-    return item
+def create_experience(payload: ExperienceCreate) -> dict:
+    now = datetime.now(timezone.utc)
+    data = {**payload.model_dump(), "created_at": now, "updated_at": now}
+    return store.create(STORE, data)
 
 
-def create_experience(db: Session, payload: ExperienceCreate) -> Experience:
-    item = Experience(**payload.model_dump())
-    db.add(item)
-    db.commit()
-    db.refresh(item)
-    return item
-
-
-def update_experience(db: Session, experience_id: int, payload: ExperienceUpdate) -> Experience:
-    item = get_experience(db, experience_id)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+def update_experience(experience_id: int, payload: ExperienceUpdate) -> dict:
+    changes = payload.model_dump(exclude_unset=True)
+    for field, value in changes.items():
         if value is None and field in REQUIRED_FIELDS:
             raise api_error(f"{field} cannot be empty", status_code=422)
-        setattr(item, field, value)
-    db.commit()
-    db.refresh(item)
-    return item
+    changes["updated_at"] = datetime.now(timezone.utc)
+    return store.update(STORE, experience_id, changes, "Experience not found")
 
 
-def delete_experience(db: Session, experience_id: int) -> None:
-    item = get_experience(db, experience_id)
-    db.delete(item)
-    db.commit()
+def delete_experience(experience_id: int) -> None:
+    store.delete(STORE, experience_id, "Experience not found")

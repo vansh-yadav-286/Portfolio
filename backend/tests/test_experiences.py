@@ -12,7 +12,7 @@ EXP_PAYLOAD = {
 
 
 def auth(token):
-    return {"Authorization": f"Bearer {token}"}
+    return {"X-CSRF-Token": token}
 
 
 def create(client, token, **overrides):
@@ -33,17 +33,17 @@ def test_write_endpoints_require_admin(client):
     assert client.delete("/api/experiences/1").status_code == 401
 
 
-def test_list_is_ordered_by_display_order(client, admin_token):
-    create(client, admin_token, title="Third", display_order=2)
-    create(client, admin_token, title="First", display_order=0)
-    create(client, admin_token, title="Second", display_order=1)
+def test_list_is_ordered_by_display_order(client, admin_csrf):
+    create(client, admin_csrf, title="Third", display_order=2)
+    create(client, admin_csrf, title="First", display_order=0)
+    create(client, admin_csrf, title="Second", display_order=1)
 
     items = client.get("/api/experiences").json()["data"]
     assert [item["title"] for item in items] == ["First", "Second", "Third"]
 
 
-def test_create_returns_all_fields_and_null_optionals(client, admin_token):
-    item = create(client, admin_token, end_date=None, link_url=None, is_current=False)
+def test_create_returns_all_fields_and_null_optionals(client, admin_csrf):
+    item = create(client, admin_csrf, end_date=None, link_url=None, is_current=False)
     assert item["start_date"] == "2026-08-05"
     assert item["end_date"] is None
     assert item["link_url"] is None
@@ -52,16 +52,16 @@ def test_create_returns_all_fields_and_null_optionals(client, admin_token):
     assert item["created_at"] and item["updated_at"]
 
 
-def test_get_single_and_not_found(client, admin_token):
-    item = create(client, admin_token)
+def test_get_single_and_not_found(client, admin_csrf):
+    item = create(client, admin_csrf)
     assert client.get(f"/api/experiences/{item['id']}").json()["data"]["title"] == item["title"]
     assert client.get("/api/experiences/9999").status_code == 404
 
 
-def test_partial_update_keeps_other_fields(client, admin_token):
-    item = create(client, admin_token)
+def test_partial_update_keeps_other_fields(client, admin_csrf):
+    item = create(client, admin_csrf)
     res = client.put(
-        f"/api/experiences/{item['id']}", json={"is_current": False}, headers=auth(admin_token)
+        f"/api/experiences/{item['id']}", json={"is_current": False}, headers=auth(admin_csrf)
     )
     assert res.status_code == 200
     updated = res.json()["data"]
@@ -71,37 +71,37 @@ def test_partial_update_keeps_other_fields(client, admin_token):
     assert updated["link_url"] == EXP_PAYLOAD["link_url"]
 
 
-def test_update_can_clear_nullable_fields(client, admin_token):
-    item = create(client, admin_token)
+def test_update_can_clear_nullable_fields(client, admin_csrf):
+    item = create(client, admin_csrf)
     res = client.put(
         f"/api/experiences/{item['id']}",
         json={"start_date": None, "link_url": None},
-        headers=auth(admin_token),
+        headers=auth(admin_csrf),
     )
     assert res.status_code == 200
     assert res.json()["data"]["start_date"] is None
     assert res.json()["data"]["link_url"] is None
 
 
-def test_update_rejects_null_required_field(client, admin_token):
-    item = create(client, admin_token)
+def test_update_rejects_null_required_field(client, admin_csrf):
+    item = create(client, admin_csrf)
     res = client.put(
-        f"/api/experiences/{item['id']}", json={"title": None}, headers=auth(admin_token)
+        f"/api/experiences/{item['id']}", json={"title": None}, headers=auth(admin_csrf)
     )
     assert res.status_code == 422
     assert res.json()["message"] == "title cannot be empty"
 
 
-def test_delete_removes_item(client, admin_token):
-    item = create(client, admin_token)
-    assert client.delete(f"/api/experiences/{item['id']}", headers=auth(admin_token)).status_code == 200
+def test_delete_removes_item(client, admin_csrf):
+    item = create(client, admin_csrf)
+    assert client.delete(f"/api/experiences/{item['id']}", headers=auth(admin_csrf)).status_code == 200
     assert client.get(f"/api/experiences/{item['id']}").status_code == 404
 
 
-def test_rejects_unsafe_link_url(client, admin_token):
+def test_rejects_unsafe_link_url(client, admin_csrf):
     res = client.post(
         "/api/experiences",
         json={**EXP_PAYLOAD, "link_url": "javascript:alert(1)"},
-        headers=auth(admin_token),
+        headers=auth(admin_csrf),
     )
     assert res.status_code == 422

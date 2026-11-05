@@ -1,9 +1,6 @@
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_current_admin
-from app.database.database import get_db
-from app.models.user import User
+from app.core.dependencies import CurrentUser, get_current_admin, verify_csrf
 from app.schemas.project import ProjectCreate, ProjectOut, ProjectUpdate
 from app.services import project_service
 from app.utils.helpers import success_response
@@ -12,43 +9,30 @@ router = APIRouter(prefix="/api/projects", tags=["projects"])
 
 
 @router.get("")
-def list_projects(featured: bool = Query(default=False), db: Session = Depends(get_db)):
-    projects = project_service.list_projects(db, featured_only=featured)
+def list_projects(featured: bool = Query(default=False)):
+    projects = project_service.list_projects(featured_only=featured)
     return success_response([ProjectOut.model_validate(p) for p in projects], "Projects retrieved")
 
 
 @router.get("/{project_id}")
-def get_project(project_id: int, db: Session = Depends(get_db)):
-    project = project_service.get_project(db, project_id)
+def get_project(project_id: int):
+    project = project_service.get_project(project_id)
     return success_response(ProjectOut.model_validate(project), "Project retrieved")
 
 
-@router.post("", status_code=201)
-def create_project(
-    payload: ProjectCreate,
-    db: Session = Depends(get_db),
-    _admin: User = Depends(get_current_admin),
-):
-    project = project_service.create_project(db, payload)
+@router.post("", status_code=201, dependencies=[Depends(verify_csrf)])
+def create_project(payload: ProjectCreate, _admin: CurrentUser = Depends(get_current_admin)):
+    project = project_service.create_project(payload)
     return success_response(ProjectOut.model_validate(project), "Project created", status_code=201)
 
 
-@router.put("/{project_id}")
-def update_project(
-    project_id: int,
-    payload: ProjectUpdate,
-    db: Session = Depends(get_db),
-    _admin: User = Depends(get_current_admin),
-):
-    project = project_service.update_project(db, project_id, payload)
+@router.put("/{project_id}", dependencies=[Depends(verify_csrf)])
+def update_project(project_id: int, payload: ProjectUpdate, _admin: CurrentUser = Depends(get_current_admin)):
+    project = project_service.update_project(project_id, payload)
     return success_response(ProjectOut.model_validate(project), "Project updated")
 
 
-@router.delete("/{project_id}")
-def delete_project(
-    project_id: int,
-    db: Session = Depends(get_db),
-    _admin: User = Depends(get_current_admin),
-):
-    project_service.delete_project(db, project_id)
+@router.delete("/{project_id}", dependencies=[Depends(verify_csrf)])
+def delete_project(project_id: int, _admin: CurrentUser = Depends(get_current_admin)):
+    project_service.delete_project(project_id)
     return success_response(None, "Project deleted")
