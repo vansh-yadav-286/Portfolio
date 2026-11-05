@@ -1447,15 +1447,61 @@ function initAuth() {
   });
 
   const loginView = $('#login-view');
-  if (!loginView) return;
+  const signupView = $('#signup-view');
+  if (!loginView || !signupView) return;
 
+  const loginForm = $('#login-form');
+  const signupForm = $('#signup-form');
   const loginError = $('#login-error');
+  const signupError = $('#signup-error');
   const notice = $('#login-notice');
 
+  function showLogin(msg) {
+    signupView.hidden = true;
+    loginView.hidden = false;
+    loginError.textContent = '';
+    notice.hidden = !msg;
+    notice.textContent = msg || '';
+    $('input[name="email"]', loginForm).focus();
+  }
+  function showSignup() {
+    loginView.hidden = true;
+    signupView.hidden = false;
+    signupError.textContent = '';
+    notice.hidden = true;
+    $('input[name="name"]', signupForm).focus();
+  }
   function showLoginError(msg) {
     loginError.textContent = msg || '';
     notice.hidden = true;
   }
+
+  $('#show-signup').addEventListener('click', (e) => { e.preventDefault(); showSignup(); });
+  $('#show-login').addEventListener('click', (e) => { e.preventDefault(); showLogin(); });
+
+  // show/hide password (login + signup fields)
+  $$('.auth__eye').forEach((eye) => {
+    const input = $('input', eye.closest('.auth__field'));
+    eye.addEventListener('click', () => {
+      const show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      eye.setAttribute('aria-pressed', String(show));
+      eye.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+    });
+  });
+
+  // Email/password sign-in has no backend any more (Google/GitHub OAuth only,
+  // no database) - these forms stay in the UI for visual continuity, but
+  // submitting one just points the visitor at the OAuth buttons instead of
+  // calling a login/register endpoint that no longer exists.
+  loginForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    loginError.textContent = 'Email/password login isn’t available any more - please continue with Google or GitHub above.';
+  });
+  signupForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    signupError.textContent = 'Sign-up isn’t available any more - please continue with Google or GitHub above.';
+  });
 
   // Google / GitHub: full-page redirect to the backend, which redirects to the
   // provider's consent screen and back. Can't be a fetch() - the consent UI
