@@ -267,35 +267,79 @@ function initClock() {
   setInterval(tick, 1000);
 }
 
+// Single navigation trigger now (the list-menu dropdown - see initListMenu),
+// so this is just the shared "#id link -> smooth scroll, header-offset aware"
+// delegation that initListMenu's links (and the hero scroll hint) rely on.
 function initNav() {
-  const toggle = $('#mobile-nav-toggle');
-  const mobileNav = $('#mobile-nav');
-  if (!toggle || !mobileNav) return;
-
-  toggle.addEventListener('click', () => {
-    const willOpen = !mobileNav.classList.contains('is-open');
-    mobileNav.classList.toggle('is-open', willOpen);
-    mobileNav.hidden = !willOpen;
-    toggle.setAttribute('aria-expanded', String(willOpen));
-  });
-
   $$('a[href^="#"]').forEach((link) => {
     link.addEventListener('click', (e) => {
       const id = link.getAttribute('href');
       if (!id || id.length < 2 || !$(id)) return;
       e.preventDefault();
       scrollToSection(id);
-      if (mobileNav.classList.contains('is-open')) {
-        mobileNav.classList.remove('is-open');
-        mobileNav.hidden = true;
-        toggle.setAttribute('aria-expanded', 'false');
-      }
     });
   });
 
   $$('.hero__scroll-hint').forEach((btn) => {
     btn.addEventListener('click', () => scrollToSection(btn.dataset.scrollTarget));
   });
+}
+
+// Vertical list/section-navigation dropdown, right of the theme toggle.
+// Smooth scrolling + the sticky-header offset is already handled by initNav()'s
+// global `a[href^="#"]` delegation above (these links match it too) - this
+// function only owns opening/closing the panel and active-link highlighting.
+function initListMenu() {
+  const wrap = $('.nav__menu-wrap');
+  const toggle = $('#list-menu-toggle');
+  const panel = $('#list-menu-panel');
+  if (!wrap || !toggle || !panel) return;
+
+  const links = $$('.list-menu__link', panel);
+  let open = false;
+
+  function setOpen(next) {
+    open = next;
+    toggle.setAttribute('aria-expanded', String(open));
+    panel.classList.toggle('is-open', open);
+    // same inert/aria-hidden fallback used elsewhere in this file (wireAccordion, setPageInert)
+    if ('inert' in panel) panel.inert = !open;
+    panel.setAttribute('aria-hidden', String(!open));
+    if (open && links[0]) links[0].focus();
+  }
+
+  toggle.addEventListener('click', () => setOpen(!open));
+
+  document.addEventListener('click', (e) => {
+    if (open && !wrap.contains(e.target)) setOpen(false);
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (open && e.key === 'Escape') { setOpen(false); toggle.focus(); }
+  });
+
+  links.forEach((link) => {
+    link.addEventListener('click', () => setOpen(false));
+  });
+
+  // Active-section highlight: "when practical" - skip quietly if the browser
+  // can't do it, same guard used elsewhere in this file (initScrollReveal).
+  if ('IntersectionObserver' in window) {
+    const sectionLinks = links
+      .map((link) => ({ link, section: $(link.getAttribute('href')) }))
+      .filter((x) => x.section);
+    if (sectionLinks.length) {
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          const match = sectionLinks.find((x) => x.section === entry.target);
+          if (match && entry.isIntersecting) {
+            sectionLinks.forEach((x) => x.link.classList.toggle('is-active', x === match));
+          }
+        });
+      }, { rootMargin: '-45% 0px -50% 0px' });
+      sectionLinks.forEach((x) => io.observe(x.section));
+    }
+  }
 }
 
 function initScrollReveal() {
@@ -1369,7 +1413,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // wrapping each init in try/catch so one broken module doesn't take
   // the whole page down with it - learned that one the hard way
   const modules = [
-    initCursor, initScrollChrome, initClock, initNav, initScrollReveal,
+    initCursor, initScrollChrome, initClock, initNav, initListMenu, initScrollReveal,
     initOrbitPause, initTilt, initMagnetic, initParallax, initRipple,
     initNeuralCanvas, initBootRain, initRoleTypewriter,
     initHackathons,
