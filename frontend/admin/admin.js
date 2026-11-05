@@ -61,6 +61,15 @@ async function initAuth() {
   const errorEl = $('#admin-login-error');
   const statusEl = $('#admin-login-status');
 
+  // Email/password admin login has no backend any more (Google/GitHub OAuth
+  // only, no database) - the form stays in the UI for visual continuity, but
+  // submitting it just points at the OAuth buttons instead of calling a
+  // login endpoint that no longer exists.
+  $('#admin-login-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    errorEl.textContent = 'Email/password login isn’t available any more - please continue with Google or GitHub below.';
+  });
+
   $$('[data-oauth-provider]', $('#admin-login-view')).forEach((btn) => {
     btn.addEventListener('click', () => {
       btn.disabled = true;

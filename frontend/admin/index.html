@@ -10,22 +10,31 @@
 </head>
 <body>
 
-<!-- Login: Google/GitHub OAuth only. Admin access is granted when the
-     authenticated, provider-verified email matches ADMIN_EMAIL - there is no
-     separate admin password or user table. -->
+<!-- Login -->
 <section id="admin-login-view" class="admin-auth">
-  <div class="admin-auth__card">
+  <form id="admin-login-form" class="admin-auth__card" novalidate>
     <h1>Admin Login</h1>
+    <label class="admin-field">
+      <span>Email</span>
+      <input type="email" name="email" autocomplete="username" required />
+    </label>
+    <label class="admin-field">
+      <span>Password</span>
+      <input type="password" name="password" autocomplete="current-password" required />
+    </label>
     <p id="admin-login-error" class="admin-error" role="alert"></p>
-    <div class="admin-auth__submit-row" style="flex-direction:column;gap:10px;align-items:stretch;">
-      <button type="button" id="admin-login-google" class="admin-btn admin-btn--primary" data-oauth-provider="google">Continue with Google</button>
-      <button type="button" id="admin-login-github" class="admin-btn" data-oauth-provider="github">Continue with GitHub</button>
+    <div class="admin-auth__submit-row">
+      <button type="submit" id="admin-login-submit" class="admin-btn admin-btn--primary">Login</button>
       <span id="admin-login-status" class="admin-login-status" hidden>
         <span class="admin-spinner" aria-hidden="true"></span>
         Logging in...
       </span>
     </div>
-  </div>
+    <div class="admin-auth__submit-row" style="margin-top:14px;flex-direction:column;gap:10px;align-items:stretch;">
+      <button type="button" id="admin-login-google" class="admin-btn admin-btn--primary" data-oauth-provider="google">Continue with Google</button>
+      <button type="button" id="admin-login-github" class="admin-btn" data-oauth-provider="github">Continue with GitHub</button>
+    </div>
+  </form>
 </section>
 
 <!-- Dashboard -->

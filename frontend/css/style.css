@@ -777,10 +777,11 @@ footer { border-top: 1px solid var(--border); padding-block: 3rem; margin-top: 4
 
 
 /* =====================================================================
-   Auth (login / signup) - fixed dark night-sky look, independent of the portfolio theme
+   Auth (login / signup) styles below are unused on the public site now that
+   the login gate has been removed (frontend/index.html no longer has
+   #auth-container). Left in place only because the admin dashboard's CSS
+   doesn't share this file - harmless, no selector here matches anything.
    ===================================================================== */
-html[data-auth="in"] #auth-container { display: none; }
-html[data-auth="out"] body { background: #030816; }
 
 .auth {
   position: fixed; inset: 0; z-index: 10000;
