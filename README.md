@@ -35,7 +35,7 @@
 <!-- ═══════════════════════ PORTFOLIO CTA ═══════════════════════════ -->
 <div align="center">
 
-[![Portfolio](https://img.shields.io/badge/🌐__OPEN_MY_PORTFOLIO__→-7C3AED?style=for-the-badge&logo=vercel&logoColor=white&labelColor=1a0533)](https://vansh-yadav-286.github.io/Portfolio/)
+[![Portfolio](https://img.shields.io/badge/🌐__OPEN_MY_PORTFOLIO__→-7C3AED?style=for-the-badge&logo=vercel&logoColor=white&labelColor=1a0533)](https://portfolio-frontend-psi-nine-51.vercel.app/)
 
 <sub><i>← My work, projects & certifications — all in one place</i></sub>
 
