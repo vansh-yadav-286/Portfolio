@@ -380,7 +380,7 @@ pytest
 
 ### 11. Deployment
 
-**Frontend → Vercel.** Import this repo into Vercel as its own project with **Root Directory = `frontend`**. It's plain static HTML/CSS/JS with no build step, so leave the build command empty. After deploying the backend, update `API_BASE_URL` in `frontend/js/config.js` to the backend's Render URL and redeploy.
+**Frontend → Vercel.** Import this repo into Vercel as its own project with **Root Directory = `frontend`**. It's plain static HTML/CSS/JS with no build step, so leave the build command empty. Keep the output directory as `.` (the frontend root); `frontend/vercel.json` canonicalizes `/admin` to `/admin/` so the admin page's relative assets resolve correctly. After deploying the backend, update `API_BASE_URL` in `frontend/js/config.js` to the backend's Render URL and redeploy.
 
 **Backend → Render.** `render.yaml` at the repo root is a ready-to-use Blueprint - a single web service, no database:
 ```
